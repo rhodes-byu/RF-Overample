@@ -20,7 +20,7 @@ class RFOversample:
             self.x = dataframe.drop([target_column], axis = 1)
         elif isinstance(target_column, int):
             self.y = dataframe.iloc[:,target_column]
-            self.x = dataframe.drop([data.columns[target_column]])
+            self.x = dataframe.drop([dataframe.columns[target_column]])
         self.num_samples = num_samples
         self.rf = RFGAP(y = self.y, prediction_type = "Classification", matrix_type = 'dense')
 
