@@ -20,9 +20,9 @@ class RFOversample:
             self.x = dataframe.drop([target_column], axis = 1)
         elif isinstance(target_column, int):
             self.y = dataframe.iloc[:,target_column]
-            self.x = dataframe.drop([dataframe.columns[target_column]])
+            self.x = dataframe.drop(dataframe.columns[target_column], axis = 1)
         self.num_samples = num_samples
-        self.rf = RFGAP(y = self.y, prediction_type = "Classification", matrix_type = 'dense')
+        self.rf = RFGAP(y = self.y, prediction_type = "classification", matrix_type = 'dense')
 
 
     def fit(self):
@@ -55,7 +55,7 @@ class RFOversample:
                     new_points[i, :] = new_features
 
                 self.x = pd.concat((self.x, pd.DataFrame(new_points, columns=self.x.columns))).reset_index(drop=True)
-                self.y = pd.concat((self.y, pd.Series(np.ones_like(newPoints[:, 0]) * label))).reset_index(drop=True)
+                self.y = pd.concat((self.y, pd.Series(np.ones_like(new_points[:, 0]) * label))).reset_index(drop=True)
 
         return self.x, self.y
 
