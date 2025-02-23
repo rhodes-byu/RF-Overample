@@ -22,7 +22,7 @@ class RFOversample:
             self.y = dataframe.iloc[:,target_column]
             self.x = dataframe.drop(dataframe.columns[target_column], axis = 1)
         self.num_samples = num_samples
-        self.rf = RFGAP(y = self.y, prediction_type = "classification", matrix_type = 'dense')
+        self.rf = RFGAP(y = self.y, prediction_type = "classification", matrix_type = 'dense', class_weight = 'balanced')
 
 
     def fit(self):
