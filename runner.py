@@ -8,7 +8,7 @@ from SupportFunctions.imbalancer import ImbalanceHandler
 from SupportFunctions.prepare_datasets import DatasetPreprocessor
 from SupportFunctions.load_datasets import load_datasets
 from SupportFunctions.apply_AA import find_minority_archetypes, merge_archetypes_with_minority
-from SupportFunctions.visualizer import clean_results, plot_f1_scores
+from SupportFunctions.visualizer import clean_results
 
 class ExperimentRunner:
     """Runs multiple dataset configurations with different imbalance techniques, encoding methods, and archetypal settings."""
@@ -114,7 +114,7 @@ class ExperimentRunner:
             # For "none", "class_weights", or "easy_ensemble", no extra resampling is applied.
             trainer = ModelTrainer(x_train, y_train, x_test, y_test, random_state=self.random_state)
             result = trainer.train_and_evaluate(method=method)
-            
+
             return {
                 "dataset": dataset_name,
                 "encoding_method": encoding_method,
@@ -147,10 +147,10 @@ if __name__ == "__main__":
     encoding_methods = ["ordinal", "onehot", "frequency", "barycentric"]
     use_archetypes = True  # Set to False to disable archetypal analysis as a preprocessing step
 
-    # Define lists of settings for archetypes and minority samples.
-    # For archetypes, for example, try proportions 0.3 and 0.4:
+    # For percent of minority class turned into archetypes try 30% and 40%
     archetype_settings = [{"archetype_proportion": 0.3}, {"archetype_proportion": 0.4}]
-    # For minority samples, try merging 20% and 30% of the original minority points:
+    
+    # For merging minority samples into archetypal points, try 20% and 30%
     minority_sample_settings = [{"sample_percentage": 0.2}, {"sample_percentage": 0.3}]
 
     runner = ExperimentRunner(target_column=None, n_jobs=-1, random_state=42, use_archetypes=use_archetypes)
@@ -161,9 +161,3 @@ if __name__ == "__main__":
     results_df = clean_results(experiment_results)
     dump(results_df, "experiment_results.pkl")
     print("Experiment results saved to 'experiment_results.pkl'")
-    
-    # Load results from file and plot
-    loaded_results_df = load("experiment_results.pkl")
-    print("\nLoaded Experiment Results:")
-    print(loaded_results_df[["Dataset", "encoding_method", "Method", "Imbalance Ratio", "Weighted F1 Score"]])
-    plot_f1_scores(loaded_results_df)
