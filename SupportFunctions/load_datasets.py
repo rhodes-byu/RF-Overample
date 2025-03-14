@@ -13,7 +13,7 @@ def load_datasets(folder_path="datasets"):
     """
     datasets = {}
     
-    # Ensure folder exists
+    # Ensure folders existence
     if not os.path.exists(folder_path):
         print(f"Warning: Folder '{folder_path}' does not exist.")
         return datasets
