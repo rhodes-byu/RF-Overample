@@ -52,18 +52,7 @@ class DatasetPreprocessor:
         elif self.encoding_method == "onehot":
             x = pd.get_dummies(x, columns=cat_cols, drop_first=True)
             print(f"One-hot encoded categorical columns: {list(cat_cols)}")
-
-        elif self.encoding_method == "frequency":
-            for col in cat_cols:
-                x[col] = x[col].map(x[col].value_counts() / len(x))
-            print(f"Frequency encoded categorical columns: {list(cat_cols)}")
-
-        elif self.encoding_method == "barycentric":
-            # Compute barycentric encoding for archetypes, but retain ordinal encoding for RF
-            self.barycentric_x = self._barycentric_encode(x, cat_cols)
-            x = self.label_encoded_x  # Keep ordinal encoding for RF
-            print(f"Barycentric encoding applied to categorical columns: {list(cat_cols)}")
-
+        
         else:
             raise ValueError(f"Invalid encoding method '{self.encoding_method}'. Choose from: 'ordinal', 'onehot', 'frequency', 'barycentric'.")
 

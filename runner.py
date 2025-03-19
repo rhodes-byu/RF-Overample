@@ -2,7 +2,6 @@ from joblib import Parallel, delayed, dump, load
 import pandas as pd
 import numpy as np
 
-# Import custom modules from the SupportFunctions package
 from SupportFunctions.model_trainer import ModelTrainer, ResamplingHandler
 from SupportFunctions.imbalancer import ImbalanceHandler
 from SupportFunctions.prepare_datasets import DatasetPreprocessor
@@ -48,7 +47,6 @@ class ExperimentRunner:
         Returns:
             list: A list of dictionaries containing experiment results.
         """
-        # If not provided, use the default setting in a one-element list
         arch_list = archetype_settings if archetype_settings is not None else [self.archetype_setting]
         ms_list = minority_sample_settings if minority_sample_settings is not None else [self.minority_sample_setting]
         
@@ -57,7 +55,7 @@ class ExperimentRunner:
             for name, dataset in datasets.items()
             for enc in encoding_methods
             for method in methods
-            if method != "archetypal" or self.use_archetypes  # skip standalone archetypal method if disabled
+            if method != "archetypal" or self.use_archetypes
             for ratio in imbalance_ratios
             for arch in arch_list
             for ms in ms_list
@@ -111,7 +109,6 @@ class ExperimentRunner:
                 elif method == "random_undersampling":
                     x_train, y_train = resampler.apply_random_undersampling()
             
-            # For "none", "class_weights", or "easy_ensemble", no extra resampling is applied.
             trainer = ModelTrainer(x_train, y_train, x_test, y_test, random_state=self.random_state)
             result = trainer.train_and_evaluate(method=method)
 
@@ -137,27 +134,40 @@ class ExperimentRunner:
 
 # Specify datasets
 all_datasets = load_datasets()
-selected = ["crx", "titanic"]
+selected = ["tic-tac-toe", "sonar", "titanic"]
 selected_datasets = {name: df for name, df in all_datasets.items() if name in selected}
 
 if __name__ == "__main__":
-    datasets = selected_datasets  # Expects a dict of dataset names -> DataFrames
-    methods = ["none", "class_weights", "smote", "adasyn", "random_undersampling", "easy_ensemble"]
-    imbalance_ratios = [0.2, 0.25]
-    encoding_methods = ["ordinal", "onehot", "frequency", "barycentric"]
-    use_archetypes = True  # Set to False to disable archetypal analysis as a preprocessing step
+    datasets = selected_datasets
+    methods = ["none", "smote"]
 
-    # For percent of minority class turned into archetypes try 30% and 40%
-    archetype_settings = [{"archetype_proportion": 0.3}, {"archetype_proportion": 0.4}]
+    # "none", "class_weights", "adasyn", "random_undersampling"
+
+    imbalance_ratios = [0.2]
     
-    # For merging minority samples into archetypal points, try 20% and 30%
-    minority_sample_settings = [{"sample_percentage": 0.2}, {"sample_percentage": 0.3}]
+    encoding_methods = ["ordinal", "onehot"]
+
+    # ["onehot"]
+
+    use_archetypes = True
+
+    # archetype percentage
+    archetype_settings = [{"archetype_proportion": 0.1}]
+
+    #{"archetype_proportion": 0.2},{"archetype_proportion": 0.3},
+    #{"archetype_proportion": 0.4},{"archetype_proportion": 0.5},{"archetype_proportion": 0.6},
+    #{"archetype_proportion": 0.7},{"archetype_proportion": 0.8},{"archetype_proportion": 0.9},
+    #{"archetype_proportion": 1.0}
+
+    # merged minority
+    minority_sample_settings = [{"sample_percentage": 0.5}]
+
+    # {"sample_percentage": 0.4}, {"sample_percentage": 0.5}
 
     runner = ExperimentRunner(target_column=None, n_jobs=-1, random_state=42, use_archetypes=use_archetypes)
     experiment_results = runner.run_multiple_configs(datasets, methods, imbalance_ratios, encoding_methods, 
                                                        archetype_settings=archetype_settings, minority_sample_settings=minority_sample_settings)
     
-    # Clean results and dump to disk
     results_df = clean_results(experiment_results)
     dump(results_df, "experiment_results.pkl")
     print("Experiment results saved to 'experiment_results.pkl'")
