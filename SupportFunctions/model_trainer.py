@@ -4,7 +4,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score, f1_score, confusion_matrix
 from imblearn.over_sampling import SMOTE, ADASYN
 from imblearn.under_sampling import RandomUnderSampler
-from imblearn.ensemble import EasyEnsembleClassifier
 
 class ModelTrainer:
     def __init__(self, x_train, y_train, x_test, y_test, random_state=42):

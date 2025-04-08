@@ -1,8 +1,27 @@
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from joblib import load
-import os
+
+def process_plot(save_fig=False, output_dir='graphs', filename='plot.png'):
+    """
+    Saves the current plot to a file (if enabled) and then either displays or closes the plot.
+
+    Args:
+        save_fig (bool): If True, save the plot as an image file.
+        output_dir (str): Directory where the image will be saved.
+        filename (str): Name of the file to save.
+    """
+    if save_fig:
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        filepath = os.path.join(output_dir, filename)
+        plt.savefig(filepath)
+        print(f"Graph saved to {filepath}")
+        plt.close()
+    else:
+        plt.show()
 
 def extract_f1_score(report_df):
     try:
@@ -13,7 +32,6 @@ def extract_f1_score(report_df):
         return np.nan
 
 def clean_results(results):
-
     valid_results = [res for res in results if "classification_report" in res]
     results_df = pd.DataFrame(valid_results)
 
@@ -22,12 +40,13 @@ def clean_results(results):
 
     # Rename columns for consistency
     results_df.rename(columns={
-        "dataset": "Dataset", 
-        "method": "Method", 
-        "imbalance_ratio": "Imbalance Ratio",
-        "encoding_method": "Encoding Method",
-        "archetype_setting": "Archetype Setting",
-        "minority_sample_setting": "Minority Sample Setting"
+    "dataset": "Dataset", 
+    "method": "Method", 
+    "imbalance_ratio": "Imbalance Ratio",
+    "encoding_method": "Encoding Method",
+    "archetype_setting": "Archetype Setting",
+    "minority_sample_setting": "Minority Sample Setting",
+    "use_archetypes": "Use Archetypes"
     }, inplace=True)
 
     if "Minority Sample Setting" in results_df.columns:
@@ -45,8 +64,7 @@ def clean_results(results):
     print("\n[DEBUG] Final Columns in Cleaned DataFrame:", results_df.columns)  # Debugging
     return results_df
 
-
-def plot_f1_scores(results_df):
+def plot_f1_scores(results_df, save_fig=False, output_dir='graphs'):
     """
     Visualizes the weighted F1 scores for each dataset, grouped by resampling method and imbalance ratio.
     """
@@ -65,9 +83,12 @@ def plot_f1_scores(results_df):
         plt.legend(title="Imbalance Ratio")
         plt.grid(axis="y", linestyle="--", alpha=0.7)
         plt.tight_layout()
-        plt.show()
+        
+        filename = f"f1_scores_{dataset}.png"
+        process_plot(save_fig=save_fig, output_dir=output_dir, filename=filename)
+        plt.clf()
 
-def plot_f1_by_encoding(results_df):
+def plot_f1_by_encoding(results_df, save_fig=False, output_dir='graphs'):
     """
     Visualizes the impact of encoding method on F1 score.
     """
@@ -86,9 +107,12 @@ def plot_f1_by_encoding(results_df):
         plt.legend(title="Encoding Method")
         plt.grid(axis="y", linestyle="--", alpha=0.7)
         plt.tight_layout()
-        plt.show()
+        
+        filename = f"f1_by_encoding_{dataset}.png"
+        process_plot(save_fig=save_fig, output_dir=output_dir, filename=filename)
+        plt.clf()
 
-def plot_f1_by_archetype_setting(results_df):
+def plot_f1_by_archetype_setting(results_df, save_fig=False, output_dir='graphs'):
     """
     Visualizes the impact of different archetype settings on F1 Score.
     """
@@ -107,9 +131,12 @@ def plot_f1_by_archetype_setting(results_df):
         plt.legend(title="Archetype Setting")
         plt.grid(axis="y", linestyle="--", alpha=0.7)
         plt.tight_layout()
-        plt.show()
+        
+        filename = f"f1_by_archetype_{dataset}.png"
+        process_plot(save_fig=save_fig, output_dir=output_dir, filename=filename)
+        plt.clf()
 
-def plot_f1_by_minority_sample_setting(results_df):
+def plot_f1_by_minority_sample_setting(results_df, save_fig=False, output_dir='graphs'):
     """
     Visualizes the impact of different minority sample settings on F1 Score.
     """
@@ -128,7 +155,37 @@ def plot_f1_by_minority_sample_setting(results_df):
         plt.legend(title="Minority Sample Setting")
         plt.grid(axis="y", linestyle="--", alpha=0.7)
         plt.tight_layout()
-        plt.show()
+        
+        filename = f"f1_by_minority_{dataset}.png"
+        process_plot(save_fig=save_fig, output_dir=output_dir, filename=filename)
+        plt.clf()
+
+def plot_f1_by_use_of_archetypes(results_df, save_fig=False, output_dir='graphs'):
+    """
+    Visualizes the impact of using archetypes versus not using them on the weighted F1 score.
+    
+    Groups experiment results by the resampling method and the 'Use Archetypes' flag,
+    then creates a bar plot comparing the average weighted F1 score for each setting per dataset.
+    """
+    datasets = results_df["Dataset"].unique()
+    for dataset in datasets:
+        df = results_df[results_df["Dataset"] == dataset]
+        pivot = df.groupby(["Method", "Use Archetypes"])["Weighted F1 Score"].mean().unstack("Use Archetypes")
+        pivot = pivot.fillna(0)
+        
+        ax = pivot.plot(kind="bar", figsize=(12, 7))
+        plt.title(f"F1 Score Comparison for {dataset} (Use of Archetypes)", fontsize=14)
+        plt.xlabel("Resampling Method", fontsize=12)
+        plt.ylabel("Weighted F1 Score", fontsize=12)
+        plt.ylim(0, 1)
+        plt.legend(title="Use Archetypes")
+        plt.grid(axis="y", linestyle="--", alpha=0.7)
+        plt.tight_layout()
+        
+        filename = f"f1_by_use_archetypes_{dataset}.png"
+        process_plot(save_fig=save_fig, output_dir=output_dir, filename=filename)
+        plt.clf()
+
 
 if __name__ == "__main__":
     results_file = "experiment_results.pkl"
@@ -140,11 +197,11 @@ if __name__ == "__main__":
         print(results_df[["Dataset", "Encoding Method", "Method", "Imbalance Ratio", 
                           "Archetype Setting", "Minority Sample Setting", "Weighted F1 Score"]])
 
-        # Run all visualizations
-        plot_f1_scores(results_df)
-        plot_f1_by_encoding(results_df)
-        plot_f1_by_archetype_setting(results_df)
-        plot_f1_by_minority_sample_setting(results_df)
-
+        # Run all visualizations with optional saving (set save_fig=True to save graphs)
+        plot_f1_scores(results_df, save_fig=True)
+        plot_f1_by_encoding(results_df, save_fig=True)
+        plot_f1_by_archetype_setting(results_df, save_fig=True)
+        plot_f1_by_minority_sample_setting(results_df, save_fig=True)
+        plot_f1_by_use_of_archetypes(results_df, save_fig=True)
     else:
         print(f"Results file '{results_file}' not found. Please run runner.py first to generate experiment results.")

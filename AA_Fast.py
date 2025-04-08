@@ -1,17 +1,5 @@
-"""
-Implementation of Frank-Wolfe algorithm for the archetypal analysis.
-
-Algorithm is based on the paper: "Archetypal Analysis as an Autoencoder"
-(https://www.researchgate.net/publication/282733207_Archetypal_Analysis_as_an_Autoencoder)
-Code adapted from https://github.com/nichohelmut/football_results/blob/master/clustering/clustering.py
-
-Author: Guillermo García Cobo
-"""
-
 import numpy as np
-
 from AA_Abstract import AA_Abstract
-
 
 class AA_Fast(AA_Abstract):
 
