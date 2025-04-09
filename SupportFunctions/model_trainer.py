@@ -24,16 +24,16 @@ class ModelTrainer:
         self.random_state = random_state
         self.model = None
 
-        # Store original imbalanced data for reset purposes
+        # Store imbalanced data for reset function
         self.imbalanced_x_train = x_train.copy()
         self.imbalanced_y_train = y_train.copy()
 
     def reset_training_data(self):
-        """Resets x_train and y_train back to the original imbalanced dataset."""
+        "resets training data to imbalanced state"
         self.x_train = self.imbalanced_x_train.copy()
         self.y_train = self.imbalanced_y_train.copy()
 
-    def train_and_evaluate(self, method="none", max_depth=2, n_estimators=100):
+    def train_and_evaluate(self, method="none", max_depth=5, n_estimators=100):
         """
         Trains and evaluates a model based on the specified resampling method.
 
@@ -50,7 +50,6 @@ class ModelTrainer:
         print(f"\n[INFO] Training with method: {method.upper()}")
         print("Class distribution before training:\n", self.y_train.value_counts(normalize=True))
 
-        # Model Selection
         if method == "none":
             model = RandomForestClassifier(max_depth=max_depth, random_state=self.random_state)
 
@@ -72,20 +71,13 @@ class ModelTrainer:
         else:
             raise ValueError(f"Invalid method specified: {method}. Choose from ['none', 'class_weights', 'smote', 'adasyn', 'random_undersampling', 'easy_ensemble'].")
 
-        # Train the model
         model.fit(self.x_train, self.y_train)
         self.model = model  
 
-        # Predictions
         predictions = model.predict(self.x_test)
 
-        # Generate classification report as a DataFrame
         report_dict = classification_report(self.y_test, predictions, output_dict=True)
-        report_df = pd.DataFrame(report_dict).T  # Maintain proper structure
-
-        # Ensure accuracy is explicitly included (if not already)
-        if "accuracy" not in report_df.index:
-            report_df.loc["accuracy"] = [report_dict["accuracy"], None, None, None]
+        report_df = pd.DataFrame(report_dict).T
 
         print("\n[INFO] Model Evaluation Complete")
         return report_df

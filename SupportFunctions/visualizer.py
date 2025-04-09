@@ -5,14 +5,6 @@ import matplotlib.pyplot as plt
 from joblib import load
 
 def process_plot(save_fig=False, output_dir='graphs', filename='plot.png'):
-    """
-    Saves the current plot to a file (if enabled) and then either displays or closes the plot.
-
-    Args:
-        save_fig (bool): If True, save the plot as an image file.
-        output_dir (str): Directory where the image will be saved.
-        filename (str): Name of the file to save.
-    """
     if save_fig:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -35,47 +27,45 @@ def clean_results(results):
     valid_results = [res for res in results if "classification_report" in res]
     results_df = pd.DataFrame(valid_results)
 
-    # Extract weighted F1 Score
     results_df["Weighted F1 Score"] = results_df["classification_report"].apply(extract_f1_score)
 
-    # Rename columns for consistency
     results_df.rename(columns={
-    "dataset": "Dataset", 
-    "method": "Method", 
-    "imbalance_ratio": "Imbalance Ratio",
-    "encoding_method": "Encoding Method",
-    "archetype_setting": "Archetype Setting",
-    "minority_sample_setting": "Minority Sample Setting",
-    "use_archetypes": "Use Archetypes"
+        "dataset": "Dataset",
+        "method": "Method",
+        "imbalance_ratio": "Imbalance Ratio",
+        "encoding_method": "Encoding Method",
+        "archetype_setting": "Archetype Setting",
+        "minority_sample_setting": "Minority Sample Setting",
+        "use_archetypes": "Use Archetypes"
     }, inplace=True)
 
     if "Minority Sample Setting" in results_df.columns:
         results_df["Minority Sample Setting"] = results_df["Minority Sample Setting"].astype(str)
-
     if "Archetype Setting" in results_df.columns:
         results_df["Archetype Setting"] = results_df["Archetype Setting"].astype(str)
 
-    # Ensure missing columns are added with default values
     for col in ["Archetype Setting", "Minority Sample Setting"]:
         if col not in results_df.columns:
-            print(f"[DEBUG] Adding missing column: {col}")  
             results_df[col] = "N/A"
 
-    print("\n[DEBUG] Final Columns in Cleaned DataFrame:", results_df.columns)  # Debugging
     return results_df
 
+def annotate_bars(ax):
+    """
+    Annotates each bar in a bar chart with its height (F1 score value).
+    """
+    for container in ax.containers:
+        ax.bar_label(container, fmt="%.3f", padding=3, fontsize=9)
+
 def plot_f1_scores(results_df, save_fig=False, output_dir='graphs'):
-    """
-    Visualizes the weighted F1 scores for each dataset, grouped by resampling method and imbalance ratio.
-    """
     datasets = results_df["Dataset"].unique()
     for dataset in datasets:
         df = results_df[results_df["Dataset"] == dataset]
-        
-        pivot = df.groupby(["Method", "Imbalance Ratio"])["Weighted F1 Score"].mean().unstack("Imbalance Ratio")
-        pivot = pivot.fillna(0)
+        pivot = df.groupby(["Method", "Imbalance Ratio"])["Weighted F1 Score"].mean().unstack("Imbalance Ratio").fillna(0)
 
         ax = pivot.plot(kind="bar", figsize=(12, 7))
+        annotate_bars(ax)
+
         plt.title(f"F1 Score Comparison for {dataset} (Averaged Over Encoding Methods)", fontsize=14)
         plt.xlabel("Resampling Method", fontsize=12)
         plt.ylabel("Weighted F1 Score", fontsize=12)
@@ -83,23 +73,20 @@ def plot_f1_scores(results_df, save_fig=False, output_dir='graphs'):
         plt.legend(title="Imbalance Ratio")
         plt.grid(axis="y", linestyle="--", alpha=0.7)
         plt.tight_layout()
-        
+
         filename = f"f1_scores_{dataset}.png"
         process_plot(save_fig=save_fig, output_dir=output_dir, filename=filename)
         plt.clf()
 
 def plot_f1_by_encoding(results_df, save_fig=False, output_dir='graphs'):
-    """
-    Visualizes the impact of encoding method on F1 score.
-    """
     datasets = results_df["Dataset"].unique()
     for dataset in datasets:
         df = results_df[results_df["Dataset"] == dataset]
-
-        pivot = df.groupby(["Method", "Encoding Method"])["Weighted F1 Score"].mean().unstack("Encoding Method")
-        pivot = pivot.fillna(0)
+        pivot = df.groupby(["Method", "Encoding Method"])["Weighted F1 Score"].mean().unstack("Encoding Method").fillna(0)
 
         ax = pivot.plot(kind="bar", figsize=(12, 7))
+        annotate_bars(ax)
+
         plt.title(f"F1 Score Comparison for {dataset} (Separated by Encoding Method)", fontsize=14)
         plt.xlabel("Resampling Method", fontsize=12)
         plt.ylabel("Weighted F1 Score", fontsize=12)
@@ -107,23 +94,20 @@ def plot_f1_by_encoding(results_df, save_fig=False, output_dir='graphs'):
         plt.legend(title="Encoding Method")
         plt.grid(axis="y", linestyle="--", alpha=0.7)
         plt.tight_layout()
-        
+
         filename = f"f1_by_encoding_{dataset}.png"
         process_plot(save_fig=save_fig, output_dir=output_dir, filename=filename)
         plt.clf()
 
 def plot_f1_by_archetype_setting(results_df, save_fig=False, output_dir='graphs'):
-    """
-    Visualizes the impact of different archetype settings on F1 Score.
-    """
     datasets = results_df["Dataset"].unique()
     for dataset in datasets:
         df = results_df[results_df["Dataset"] == dataset]
-
-        pivot = df.groupby(["Method", "Archetype Setting"])["Weighted F1 Score"].mean().unstack("Archetype Setting")
-        pivot = pivot.fillna(0)
+        pivot = df.groupby(["Method", "Archetype Setting"])["Weighted F1 Score"].mean().unstack("Archetype Setting").fillna(0)
 
         ax = pivot.plot(kind="bar", figsize=(12, 7))
+        annotate_bars(ax)
+
         plt.title(f"F1 Score Comparison for {dataset} (Separated by Archetype Setting)", fontsize=14)
         plt.xlabel("Resampling Method", fontsize=12)
         plt.ylabel("Weighted F1 Score", fontsize=12)
@@ -131,23 +115,20 @@ def plot_f1_by_archetype_setting(results_df, save_fig=False, output_dir='graphs'
         plt.legend(title="Archetype Setting")
         plt.grid(axis="y", linestyle="--", alpha=0.7)
         plt.tight_layout()
-        
+
         filename = f"f1_by_archetype_{dataset}.png"
         process_plot(save_fig=save_fig, output_dir=output_dir, filename=filename)
         plt.clf()
 
 def plot_f1_by_minority_sample_setting(results_df, save_fig=False, output_dir='graphs'):
-    """
-    Visualizes the impact of different minority sample settings on F1 Score.
-    """
     datasets = results_df["Dataset"].unique()
     for dataset in datasets:
         df = results_df[results_df["Dataset"] == dataset]
-
-        pivot = df.groupby(["Method", "Minority Sample Setting"])["Weighted F1 Score"].mean().unstack("Minority Sample Setting")
-        pivot = pivot.fillna(0)
+        pivot = df.groupby(["Method", "Minority Sample Setting"])["Weighted F1 Score"].mean().unstack("Minority Sample Setting").fillna(0)
 
         ax = pivot.plot(kind="bar", figsize=(12, 7))
+        annotate_bars(ax)
+
         plt.title(f"F1 Score Comparison for {dataset} (Separated by Minority Sample Setting)", fontsize=14)
         plt.xlabel("Resampling Method", fontsize=12)
         plt.ylabel("Weighted F1 Score", fontsize=12)
@@ -155,25 +136,20 @@ def plot_f1_by_minority_sample_setting(results_df, save_fig=False, output_dir='g
         plt.legend(title="Minority Sample Setting")
         plt.grid(axis="y", linestyle="--", alpha=0.7)
         plt.tight_layout()
-        
+
         filename = f"f1_by_minority_{dataset}.png"
         process_plot(save_fig=save_fig, output_dir=output_dir, filename=filename)
         plt.clf()
 
 def plot_f1_by_use_of_archetypes(results_df, save_fig=False, output_dir='graphs'):
-    """
-    Visualizes the impact of using archetypes versus not using them on the weighted F1 score.
-    
-    Groups experiment results by the resampling method and the 'Use Archetypes' flag,
-    then creates a bar plot comparing the average weighted F1 score for each setting per dataset.
-    """
     datasets = results_df["Dataset"].unique()
     for dataset in datasets:
         df = results_df[results_df["Dataset"] == dataset]
-        pivot = df.groupby(["Method", "Use Archetypes"])["Weighted F1 Score"].mean().unstack("Use Archetypes")
-        pivot = pivot.fillna(0)
-        
+        pivot = df.groupby(["Method", "Use Archetypes"])["Weighted F1 Score"].mean().unstack("Use Archetypes").fillna(0)
+
         ax = pivot.plot(kind="bar", figsize=(12, 7))
+        annotate_bars(ax)
+
         plt.title(f"F1 Score Comparison for {dataset} (Use of Archetypes)", fontsize=14)
         plt.xlabel("Resampling Method", fontsize=12)
         plt.ylabel("Weighted F1 Score", fontsize=12)
@@ -181,11 +157,10 @@ def plot_f1_by_use_of_archetypes(results_df, save_fig=False, output_dir='graphs'
         plt.legend(title="Use Archetypes")
         plt.grid(axis="y", linestyle="--", alpha=0.7)
         plt.tight_layout()
-        
+
         filename = f"f1_by_use_archetypes_{dataset}.png"
         process_plot(save_fig=save_fig, output_dir=output_dir, filename=filename)
         plt.clf()
-
 
 if __name__ == "__main__":
     results_file = "experiment_results.pkl"
@@ -194,10 +169,9 @@ if __name__ == "__main__":
         results_df = load(results_file)
         print("Loaded experiment results from", results_file)
 
-        print(results_df[["Dataset", "Encoding Method", "Method", "Imbalance Ratio", 
+        print(results_df[["Dataset", "Encoding Method", "Method", "Imbalance Ratio",
                           "Archetype Setting", "Minority Sample Setting", "Weighted F1 Score"]])
 
-        # Run all visualizations with optional saving (set save_fig=True to save graphs)
         plot_f1_scores(results_df, save_fig=True)
         plot_f1_by_encoding(results_df, save_fig=True)
         plot_f1_by_archetype_setting(results_df, save_fig=True)

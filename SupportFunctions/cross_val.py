@@ -5,7 +5,6 @@ import pandas as pd
 from joblib import Parallel, delayed, dump
 from sklearn.model_selection import StratifiedKFold
 
-# Import support functions from our project.
 from SupportFunctions.model_trainer import ModelTrainer, ResamplingHandler
 from SupportFunctions.imbalancer import ImbalanceHandler
 from SupportFunctions.prepare_datasets import DatasetPreprocessor
@@ -16,18 +15,12 @@ from SupportFunctions.visualizer import clean_results
 def run_cross_validation(dataset, target_column, encoding_method, method, imbalance_ratio,
                          archetype_setting, minority_sample_setting, use_archetypes,
                          n_folds, seed, random_state):
-    """
-    Run k-fold cross validation for a given configuration on a dataset.
-    """
-    # Preprocess the dataset.
     preprocessor = DatasetPreprocessor(dataset, target_column=target_column, 
                                        encoding_method=encoding_method, random_state=random_state)
 
-    # Use encoded data
     X_full = pd.concat([preprocessor.x_train, preprocessor.x_test], ignore_index=True)
     Y_full = pd.concat([preprocessor.y_train, preprocessor.y_test], ignore_index=True)
 
-    # Stratified K-Fold setup
     skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
     fold_reports = []
 
@@ -37,11 +30,9 @@ def run_cross_validation(dataset, target_column, encoding_method, method, imbala
         x_val_fold = X_full.iloc[val_index]
         y_val_fold = Y_full.iloc[val_index]
 
-        # Introduce imbalance
         ih = ImbalanceHandler(x_train_fold, y_train_fold, imbalance_ratio, random_state=seed)
         x_train_fold, y_train_fold = ih.introduce_imbalance()
 
-        # Apply archetypes if needed
         if method in ["smote", "adasyn"] and use_archetypes:
             if "archetype_proportion" in archetype_setting:
                 archetypes = find_minority_archetypes(x_train_fold, y_train_fold,
@@ -63,7 +54,6 @@ def run_cross_validation(dataset, target_column, encoding_method, method, imbala
                     random_state=seed
                 )
 
-        # Model training and evaluation
         trainer = ModelTrainer(x_train_fold, y_train_fold, x_val_fold, y_val_fold, random_state=random_state)
         report = trainer.train_and_evaluate(method=method)
         fold_reports.append(report)
@@ -71,20 +61,12 @@ def run_cross_validation(dataset, target_column, encoding_method, method, imbala
     return aggregate_fold_reports(fold_reports)
 
 def aggregate_fold_reports(reports):
-    """
-    Aggregates classification reports from each fold by averaging numeric metrics.
-    """
     aggregated = pd.concat(reports, axis=0)
-    aggregated = aggregated.groupby(aggregated.index).mean()
-    return aggregated
+    return aggregated.groupby(aggregated.index).mean()
 
 def run_experiment(config):
-    """
-    Runs the entire experiment across a grid of parameter combinations using cross-validation.
-    """
     all_datasets = load_datasets(config.get("dataset_folder", "datasets"),
                                  selected_datasets=config.get("selected_datasets", []))
-    print(f"[DEBUG] Loaded datasets: {list(all_datasets.keys())}")
 
     jobs = []
     n_iterations = config.get("n_iterations", 1)
@@ -102,7 +84,7 @@ def run_experiment(config):
                             for ratio in config.get("imbalance_ratios", [0.1]):
                                 for arch_setting in config.get("archetype_settings", [{"archetype_proportion": 0.2}]):
                                     for min_setting in config.get("minority_sample_settings", [{"sample_percentage": 0.5}]):
-                                        job_config = {
+                                        jobs.append({
                                             "dataset_name": dataset_name,
                                             "dataset": dataset,
                                             "encoding_method": enc,
@@ -114,8 +96,7 @@ def run_experiment(config):
                                             "seed": seed,
                                             "n_folds": config.get("n_folds", 1),
                                             "random_state": config.get("random_state", 42)
-                                        }
-                                        jobs.append(job_config)
+                                        })
 
     def process_job(job_config):
         target_column = config.get("target_column") or job_config["dataset"].columns[0]
@@ -163,12 +144,5 @@ def run_experiment(config):
     )
 
     results_df = clean_results(results)
-
-    print("DEBUG: Cleaned Experiment Results (first 5 rows):")
-    print(results_df.head())
-    print("DEBUG: Cleaned Results Columns:", results_df.columns.tolist())
-
     dump(results_df, config.get("results_file", "experiment_results.pkl"))
-    print("Experiment results saved to '{}'".format(config.get("results_file", "experiment_results.pkl")))
-
     return results_df
