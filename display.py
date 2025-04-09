@@ -1,5 +1,3 @@
-# display.py
-
 from joblib import load
 import os
 from SupportFunctions.visualizer import (
@@ -27,12 +25,11 @@ if os.path.exists(results_file):
         print(f"Error: {e}")
         print("\nColumn names available:", loaded_results_df.columns)
     
-    # Generate and save graphs. The save_fig parameter ensures that plots are saved into the 'graphs' folder.
     plot_f1_scores(loaded_results_df, save_fig=True)
-    plot_f1_by_encoding(loaded_results_df, save_fig=True)
-    plot_f1_by_archetype_setting(loaded_results_df, save_fig=True)
-    plot_f1_by_minority_sample_setting(loaded_results_df, save_fig=True)
-    plot_f1_by_use_of_archetypes(loaded_results_df, save_fig=True)
+    # plot_f1_by_encoding(loaded_results_df, save_fig=True)
+    # plot_f1_by_archetype_setting(loaded_results_df, save_fig=True)
+    # plot_f1_by_minority_sample_setting(loaded_results_df, save_fig=True)
+    # plot_f1_by_use_of_archetypes(loaded_results_df, save_fig=True)
 
 else:
     print(f"Results file '{results_file}' not found. Please run runner.py first to generate experiment results.")
