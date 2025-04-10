@@ -4,6 +4,9 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score, f1_score, confusion_matrix
 from imblearn.over_sampling import SMOTE, ADASYN
 from imblearn.under_sampling import RandomUnderSampler
+import sys
+sys.path.append("../")
+from rfoversample import RFOversampler
 
 class ModelTrainer:
     def __init__(self, x_train, y_train, x_test, y_test, random_state=42):
@@ -38,7 +41,7 @@ class ModelTrainer:
         Trains and evaluates a model based on the specified resampling method.
 
         Args:
-            method (str): Resampling method (options: "none", "class_weights", "smote", "adasyn", "random_undersampling", "easy_ensemble").
+            method (str): Resampling method (options: "none", "class_weights", "smote", "adasyn", "random_undersampling", "easy_ensemble", "rfoversample").
             max_depth (int): Max depth for RandomForestClassifier.
             n_estimators (int): Number of estimators for EasyEnsembleClassifier.
 
@@ -56,7 +59,7 @@ class ModelTrainer:
         elif method == "class_weights":
             model = RandomForestClassifier(max_depth=max_depth, class_weight="balanced", random_state=self.random_state)
 
-        elif method in ["smote", "adasyn", "random_undersampling"]:
+        elif method in ["smote", "adasyn", "random_undersampling", "rfoversample"]:
             resampler = ResamplingHandler(self.x_train, self.y_train, random_state=self.random_state)
 
             if method == "smote":
@@ -65,6 +68,8 @@ class ModelTrainer:
                 self.x_train, self.y_train = resampler.apply_adasyn()
             elif method == "random_undersampling":
                 self.x_train, self.y_train = resampler.apply_random_undersampling()
+            elif method == "rfoversample":
+                self.x_train, self.y_train =resampler.apply_rfoversample()
 
             model = RandomForestClassifier(max_depth=max_depth, random_state=self.random_state)
 
@@ -105,4 +110,12 @@ class ResamplingHandler:
         """Applies Random Undersampling and returns the resampled dataset."""
         rus = RandomUnderSampler(random_state=self.random_state)
         x_resampled, y_resampled = rus.fit_resample(self.x_train, self.y_train)
+        return x_resampled, y_resampled
+
+    def apply_rfoversample(self):
+        """Applies RF Oversampling and returns the resampled dataset."""
+        #concat xtrain and ytrain into one training dataframe.
+        TrainData = pd.concat([self.y_train, self.x_train], axis=1)
+        rfoversampler = RFOversampler(Data=TrainData, target_ind=0, num_samples=3, encoded=False, cat_cols=None)
+        x_resampled, y_resampled = rfoversampler.fit()
         return x_resampled, y_resampled
