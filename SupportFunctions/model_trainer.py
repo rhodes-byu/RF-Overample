@@ -69,7 +69,7 @@ class ModelTrainer:
             elif method == "random_undersampling":
                 self.x_train, self.y_train = resampler.apply_random_undersampling()
             elif method == "rfoversample":
-                self.x_train, self.y_train =resampler.apply_rfoversample()
+                self.x_train, self.y_train = resampler.apply_rfoversample()
 
             model = RandomForestClassifier(max_depth=max_depth, random_state=self.random_state)
 
