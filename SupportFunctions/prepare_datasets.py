@@ -42,6 +42,8 @@ class DatasetPreprocessor:
             x = self.label_encoded_x
         elif self.encoding_method == "onehot":
             x = pd.get_dummies(x, columns=cat_cols, drop_first=True)
+        elif self.encoding_method == "other":
+            return
         else:
             raise ValueError(f"Invalid encoding method '{self.encoding_method}'. Choose 'ordinal' or 'onehot'.")
 

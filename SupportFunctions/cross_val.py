@@ -15,6 +15,7 @@ from SupportFunctions.visualizer import clean_results
 def run_cross_validation(dataset, target_column, encoding_method, method, imbalance_ratio,
                          archetype_setting, minority_sample_setting, use_archetypes,
                          n_folds, seed, random_state):
+
     preprocessor = DatasetPreprocessor(dataset, target_column=target_column, 
                                        encoding_method=encoding_method, random_state=random_state)
 
