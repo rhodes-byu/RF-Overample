@@ -8,7 +8,7 @@ class RFOversampler:
     """
     Currently (04-01-25) wrtten to upsample all minority classes in a dataset to the number of observations of the majority class.
     """
-    def __init__(self, Data, target_ind=0, num_samples=3, contains_categoricals=False, encoded=False, cat_cols=None):
+    def __init__(self, x_train_fold, y_train_fold, num_samples=3, contains_categoricals=False, encoded=False, cat_cols=None):
         """
         dataframe: A pandas dataframe that containes the features and target
         target_column: Target column name as a string or target column index as an integer
@@ -18,12 +18,15 @@ class RFOversampler:
         encoded: Default to False. If the dataset contains dummy encoded categorical features, set to True
         cat_cols: Default to None. If the dataset contains categorical features, provide a list of the column indices
         """
-        self.Data = Data
-        self.target_ind = target_ind
+
+
+        self.Data = pd.concat([y_train_fold, x_train_fold], axis=1) #concatenate the target and features into one dataframe
+        self.target_ind = 0 #target column index is 0 becasue the target column is the first column in self.Data
         self.num_samples = num_samples
         self.contains_categoricals = contains_categoricals
         self.encoded = encoded
         self.cat_cols = cat_cols
+        
 
     def fit(self):
         """
