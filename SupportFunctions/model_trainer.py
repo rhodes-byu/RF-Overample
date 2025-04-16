@@ -114,6 +114,6 @@ class ResamplingHandler:
 
     def apply_rfoversample(self):
         """Applies RF Oversampling and returns the resampled dataset."""
-        rfoversampler = RFOversampler(self.x_train, self.y_train, num_samples=3, encoded=False, cat_cols=None)
+        rfoversampler = RFOversampler(self.x_train, self.y_train, num_samples=3, contains_categoricals=False, encoded=False, cat_cols=None)
         x_resampled, y_resampled = rfoversampler.fit()
         return x_resampled, y_resampled

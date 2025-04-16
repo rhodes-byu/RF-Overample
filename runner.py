@@ -7,7 +7,11 @@ if __name__ == "__main__":
         "methods": ["rfoversample"],
         # Model compatability: "adasyn", "random_undersampling" (if applicable)
         "imbalance_ratios": [0.2],
+<<<<<<< HEAD
         "encoding_methods": ["onehot"], # or ordinal
+=======
+        "encoding_methods": ["other"], # or ordinal
+>>>>>>> 1c5862261008c1288b97717ad7b674e7bcfa003f
         "use_archetypes": [False],
         "archetype_settings": [{"archetype_proportion": 0.2}],
         "minority_sample_settings": [{"sample_percentage": 0.5}],
