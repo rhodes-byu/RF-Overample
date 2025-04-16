@@ -3,7 +3,7 @@ from sklearn.model_selection import train_test_split
 
 class DatasetPreprocessor:
     def __init__(self, dataset, target_column=None, test_size=0.3, random_state=42, 
-                 encoding_method="ordinal"):
+                 encoding_method="ordinal", method=None):
         """
         Preprocesses a dataset: encodes categorical features and splits into train/test sets.
 
@@ -19,6 +19,7 @@ class DatasetPreprocessor:
         self.test_size = test_size
         self.random_state = random_state
         self.encoding_method = encoding_method.lower()
+        self.method = method
 
         self.x_train = self.x_test = self.y_train = self.y_test = None
         self.label_encoded_x = None
@@ -30,6 +31,12 @@ class DatasetPreprocessor:
         y = self.dataset[self.target_column]
         cat_cols = x.select_dtypes(include=["object", "category"]).columns
 
+        if self.method == "rfoversample":
+            self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(
+            x, y, test_size=self.test_size, random_state=self.random_state
+            )
+            return
+        
         # Label encoding always stored for "ordinal"
         self.label_encoded_x = x.copy()
         if not cat_cols.empty:
@@ -42,8 +49,6 @@ class DatasetPreprocessor:
             x = self.label_encoded_x
         elif self.encoding_method == "onehot":
             x = pd.get_dummies(x, columns=cat_cols, drop_first=True)
-        elif self.encoding_method == "other":
-            return
         else:
             raise ValueError(f"Invalid encoding method '{self.encoding_method}'. Choose 'ordinal' or 'onehot'.")
 

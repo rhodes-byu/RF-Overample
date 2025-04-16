@@ -3,12 +3,12 @@ from SupportFunctions.cross_val import run_experiment
 if __name__ == "__main__":
     config = {
         "dataset_folder": "datasets",
-        "selected_datasets": ["titanic"],
-        "methods": ["none", "smote", "class_weights"],
+        "selected_datasets": ["diabetes"],
+        "methods": ["rfoversample"],
         # Model compatability: "adasyn", "random_undersampling" (if applicable)
         "imbalance_ratios": [0.2],
         "encoding_methods": ["onehot"], # or ordinal
-        "use_archetypes": [True],
+        "use_archetypes": [False],
         "archetype_settings": [{"archetype_proportion": 0.2}],
         "minority_sample_settings": [{"sample_percentage": 0.5}],
         "n_iterations": 3,

@@ -17,7 +17,7 @@ def run_cross_validation(dataset, target_column, encoding_method, method, imbala
                          n_folds, seed, random_state):
 
     preprocessor = DatasetPreprocessor(dataset, target_column=target_column, 
-                                       encoding_method=encoding_method, random_state=random_state)
+                                       encoding_method=encoding_method, random_state=random_state, method=method)
 
     X_full = pd.concat([preprocessor.x_train, preprocessor.x_test], ignore_index=True)
     Y_full = pd.concat([preprocessor.y_train, preprocessor.y_test], ignore_index=True)
