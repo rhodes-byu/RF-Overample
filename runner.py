@@ -7,7 +7,7 @@ if __name__ == "__main__":
                               'diabetes', 'ecoli_5', 'glass', 'iris', 'mnist_test', 'optdigits',
                               'parkinsons', 'seeds', 'segmentation', 'sonar', 'treeData', 'waveform',
                               'wine'],
-        "methods": ['none', 'class_weights', 'none', 'class_weights', 'smote', 'adasyn', 
+        "methods": ['none', 'class_weights', 'class_weights', 'smote', 'adasyn', 
                     'random_undersampling', 'easy_ensemble', 'rfoversample'],
         # Model compatability: "adasyn", "random_undersampling" (if applicable)
         "imbalance_ratios": [0.2],
