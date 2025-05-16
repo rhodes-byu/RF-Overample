@@ -13,7 +13,7 @@ categorical_cols = {
     'heart_disease': [1, 2, 5, 6, 8, 10, 11, 12],
     'heart_failure': [1, 2, 4, 7, 8],
     'hepatitis': [0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
-    'hill_valley': 'all',
+    'hill_valley': None,
     'ionosphere': [0, 1],
     'iris': None,
     'lymphography': 'all',

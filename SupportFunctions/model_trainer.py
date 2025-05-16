@@ -74,7 +74,7 @@ class ModelTrainer:
             model = RandomForestClassifier(max_depth=max_depth, random_state=self.random_state)
 
         else:
-            raise ValueError(f"Invalid method specified: {method}. Choose from ['none', 'class_weights', 'smote', 'adasyn', 'random_undersampling', 'easy_ensemble'].")
+            raise ValueError(f"Invalid method specified: {method}. Choose from ['none', 'class_weights', 'smote', 'adasyn', 'random_undersampling', 'easy_ensemble', 'rfoversample'].")
 
         model.fit(self.x_train, self.y_train)
         self.model = model  

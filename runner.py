@@ -3,11 +3,15 @@ from SupportFunctions.cross_val import run_experiment
 if __name__ == "__main__":
     config = {
         "dataset_folder": "datasets",
-        "selected_datasets": ["hill_valley"],
-        "methods": ["rfoversample"],
+        "selected_datasets": ["hill_valley", 'artificial_tree', 'balance_scale', 'breast_cancer', 
+                              'diabetes', 'ecoli_5', 'glass', 'iris', 'mnist_test', 'optdigits',
+                              'parkinsons', 'seeds', 'segmentation', 'sonar', 'treeData', 'waveform',
+                              'wine'],
+        "methods": ['none', 'class_weights', 'none', 'class_weights', 'smote', 'adasyn', 
+                    'random_undersampling', 'easy_ensemble', 'rfoversample'],
         # Model compatability: "adasyn", "random_undersampling" (if applicable)
         "imbalance_ratios": [0.2],
-        "encoding_methods": ["other"], # or ordinal
+        "encoding_methods": ["onehot"], # or ordinal
         "use_archetypes": [False],
         "archetype_settings": [{"archetype_proportion": 0.2}],
         "minority_sample_settings": [{"sample_percentage": 0.5}],
