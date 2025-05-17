@@ -1,11 +1,40 @@
-Columns
-artificial tree = None (41 columns)
-audiology = (1:70 columns) (all categorical)
-balance_scale = (5 columns)
-breast_cancer = (10 columns)
-car = (7 columns) (all categorical)
-chess = (36 columns) (all categorical)
-crx = (15 columns) (mixed cat:[0],[1],[3],[4],[5],[6],[8],[9],[11],[12])
-diabetes = None (9 columns)
-ecoli_5 = None (8 columns)
-flare1 = (11 columns) (mixed cat: [0], [1], [2] other numeric)
+We are identifying the non linear and non numeric columns to specify for models that use methods other than onehot or ordinal encoding.
+
+We will list the total number of columns, with 0 being our target, and identify the numerical columns. 
+
+Thus total column numbering will be ex. Columns = 5, [0, 1, 2, 3, 4, 5] or 6 total.
+
+in other words:
+Column total only refers to feature columns and not the target column. Additionally, we can assume that [0] or the target is always categorical.
+
+Datasets:
+artifical_tree: Columns = 40, Categorical = None
+audiology: Columns = 67, Categorical = All
+balance_scale: Columns = 4, Categorical = All
+breast_cancer: Columns = 9, Categorical = All
+car: Columns = 6, Categorical = All
+chess: Columns = 35, Categorical = All
+crx: Columns = 14, Categorical = [1, 3, 4, 5, 6, 8, 9, 11, 12]
+diabetes: Columns = 8, Categorical = None
+ecoli_5: Columns = 7, Categorical = None
+flare1: Columns = 10, Categorical = [1, 2, 3]
+glass: Columns = 9, Categorical = None
+heart_disease: Columns = 13, Categorical = [2, 3, 6, 7, 9, 11, 12, 13]
+heart_failure: Columns = 10, Categorical = [2, 3, 5, 8, 9]
+hepatitis: Columns = 15, Categorical = [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+hill_valley: Columns = 100, Categorical = None
+ionosphere: Columns = 34, Categorical = [1, 2 (could be dropped as only contains 0)]
+iris: Columns = 4, Categorical = None
+lymphography: Columns = 18, Categorical = All
+mnist_test: Columns = 784, Categorical = None
+optdigits: Columns = 64, Categorical = None
+parkinsons: Columns = 22, Categorical = None
+seeds: Columns = 7, Categorical = None
+segmentation: Columns = 19, Categorical = None (although [3] or region pixel count is always 9)
+sonar: Columns 60, Categorical = None
+tic-tac-toe: Columns = 9, Categorical = All
+titanic: Columns = 7, Categorical = [1, 2, 4, 5, 7]
+treeData: Columns = 60, Categorical = None
+waveform: Columns = 40, Categorical = None
+wine: Columns = 13, Categorical = None
+zoo: Columns = 17, Categorical = All
