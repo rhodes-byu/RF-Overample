@@ -3,7 +3,7 @@ from sklearn.model_selection import train_test_split
 
 class DatasetPreprocessor:
     def __init__(self, dataset, target_column=None, test_size=0.3, random_state=42, 
-                 encoding_method="ordinal", method=None):
+                 encoding_method="ordinal", method=None, categorical_indices = None):
         """
         Preprocesses a dataset: encodes categorical features and splits into train/test sets.
 
@@ -23,6 +23,7 @@ class DatasetPreprocessor:
 
         self.x_train = self.x_test = self.y_train = self.y_test = None
         self.label_encoded_x = None
+        self.categorical_indices = categorical_indices
 
         self._prepare_data()
 
@@ -37,16 +38,11 @@ class DatasetPreprocessor:
             )
             return
         
-        # Label encoding always stored for "ordinal"
-        self.label_encoded_x = x.copy()
-        if not cat_cols.empty:
-            self.label_encoded_x[cat_cols] = self.label_encoded_x[cat_cols].apply(
-                lambda col: col.astype("category").cat.codes
-            )
-
-        # Choose encoding
         if self.encoding_method == "ordinal":
-            x = self.label_encoded_x
+            if not cat_cols.empty:
+                x[cat_cols] = x[cat_cols].apply(lambda col: col.astype("category").cat.codes)
+            self.label_encoded_x = x.copy()
+    
         elif self.encoding_method == "onehot":
             x = pd.get_dummies(x, columns=cat_cols, drop_first=True)
         else:
@@ -55,4 +51,3 @@ class DatasetPreprocessor:
         self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(
             x, y, test_size=self.test_size, random_state=self.random_state
         )
-

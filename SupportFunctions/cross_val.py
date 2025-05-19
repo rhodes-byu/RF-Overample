@@ -11,13 +11,14 @@ from SupportFunctions.prepare_datasets import DatasetPreprocessor
 from SupportFunctions.load_datasets import load_datasets
 from SupportFunctions.apply_AA import find_minority_archetypes, merge_archetypes_with_minority
 from SupportFunctions.visualizer import clean_results
+from SupportFunctions.column_dict import build_dataset_dict
 
 def run_cross_validation(dataset, target_column, encoding_method, method, imbalance_ratio,
                          archetype_setting, minority_sample_setting, use_archetypes,
-                         n_folds, seed, random_state):
+                         n_folds, seed, random_state, categorical_indices=None):
 
     preprocessor = DatasetPreprocessor(dataset, target_column=target_column, 
-                                       encoding_method=encoding_method, random_state=random_state, method=method)
+                                       encoding_method=encoding_method, random_state=random_state, method=method, categorical_indices=categorical_indices)
 
     X_full = pd.concat([preprocessor.x_train, preprocessor.x_test], ignore_index=True)
     Y_full = pd.concat([preprocessor.y_train, preprocessor.y_test], ignore_index=True)
@@ -66,8 +67,14 @@ def aggregate_fold_reports(reports):
     return aggregated.groupby(aggregated.index).mean()
 
 def run_experiment(config):
-    all_datasets = load_datasets(config.get("dataset_folder", "datasets"),
-                                 selected_datasets=config.get("selected_datasets", []))
+    full_dataset_dict = build_dataset_dict(config.get("dataset_folder", "datasets"))
+    selected_names = config.get("selected_datasets", [])
+
+    # Filter to selected datasets
+    all_datasets = {
+        name: full_dataset_dict[name]
+        for name in selected_names if name in full_dataset_dict
+    }
 
     jobs = []
     n_iterations = config.get("n_iterations", 1)
@@ -78,7 +85,9 @@ def run_experiment(config):
     for iteration in range(1, n_iterations + 1):
         seed = iteration
         for use_arch in use_archetypes:
-            for dataset_name, dataset in all_datasets.items():
+            for dataset_name, dataset_entry in all_datasets.items():
+                dataset = dataset_entry["data"]
+                cat_indices = dataset_entry["categorical_indices"]
                 for enc in config.get("encoding_methods", ["onehot"]):
                     for method in config.get("methods", ["none"]):
                         if method != "archetypal" or use_arch:
@@ -88,6 +97,7 @@ def run_experiment(config):
                                         jobs.append({
                                             "dataset_name": dataset_name,
                                             "dataset": dataset,
+                                            "cat_cols": cat_indices,
                                             "encoding_method": enc,
                                             "method": method,
                                             "imbalance_ratio": ratio,
@@ -113,7 +123,8 @@ def run_experiment(config):
                 use_archetypes=job_config["use_archetypes"],
                 n_folds=job_config["n_folds"],
                 seed=job_config["seed"],
-                random_state=job_config["random_state"]
+                random_state=job_config["random_state"],
+                categorical_indices=job_config["categorical_indices"]
             )
             return {
                 "classification_report": cv_report,
