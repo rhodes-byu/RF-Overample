@@ -1,25 +1,21 @@
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, accuracy_score, f1_score, confusion_matrix
-from imblearn.over_sampling import SMOTE, ADASYN
+from sklearn.metrics import classification_report
+from imblearn.over_sampling import SMOTE, ADASYN, SMOTENC
 from imblearn.under_sampling import RandomUnderSampler
 import sys
 sys.path.append("../")
 from rfoversample import RFOversampler
 
-class ModelTrainer:
-    def __init__(self, x_train, y_train, x_test, y_test, random_state=42):
-        """
-        Initializes the ModelTrainer.
 
-        Args:
-            x_train (pd.DataFrame): Training feature set.
-            y_train (pd.Series): Training labels.
-            x_test (pd.DataFrame): Testing feature set.
-            y_test (pd.Series): Testing labels.
-            random_state (int): Random seed for reproducibility.
-        """
+class ModelTrainer:
+    def __init__(self, x_train, y_train, x_test, y_test,
+                 random_state=42,
+                 categorical_indices=None,
+                 categorical_column_names=None,
+                 contains_categoricals=False,
+                 encoded=False):
         self.x_train = x_train
         self.y_train = y_train
         self.x_test = x_test
@@ -27,31 +23,28 @@ class ModelTrainer:
         self.random_state = random_state
         self.model = None
 
-        # Store imbalanced data for reset function
         self.imbalanced_x_train = x_train.copy()
         self.imbalanced_y_train = y_train.copy()
 
+        self.categorical_indices = categorical_indices or []
+        self.cat_column_names = categorical_column_names or []
+        self.contains_categoricals = contains_categoricals
+        self.encoded = encoded
+
     def reset_training_data(self):
-        "resets training data to imbalanced state"
         self.x_train = self.imbalanced_x_train.copy()
         self.y_train = self.imbalanced_y_train.copy()
 
     def train_and_evaluate(self, method="none", max_depth=5, n_estimators=100):
-        """
-        Trains and evaluates a model based on the specified resampling method.
-
-        Args:
-            method (str): Resampling method (options: "none", "class_weights", "smote", "adasyn", "random_undersampling", "easy_ensemble", "rfoversample").
-            max_depth (int): Max depth for RandomForestClassifier.
-            n_estimators (int): Number of estimators for EasyEnsembleClassifier.
-
-        Returns:
-            pd.DataFrame: A classification report formatted for visualization.
-        """
         self.reset_training_data()
 
         print(f"\n[INFO] Training with method: {method.upper()}")
         print("Class distribution before training:\n", self.y_train.value_counts(normalize=True))
+
+        # Check for single-class training data
+        if len(self.y_train.unique()) < 2:
+            print(f"[ERROR] Only one class present in y_train. Skipping training for method: {method}")
+            return pd.DataFrame()
 
         if method == "none":
             model = RandomForestClassifier(max_depth=max_depth, random_state=self.random_state)
@@ -59,61 +52,106 @@ class ModelTrainer:
         elif method == "class_weights":
             model = RandomForestClassifier(max_depth=max_depth, class_weight="balanced", random_state=self.random_state)
 
-        elif method in ["smote", "adasyn", "random_undersampling", "rfoversample"]:
-            resampler = ResamplingHandler(self.x_train, self.y_train, random_state=self.random_state)
+        elif method in ["smote", "adasyn", "random_undersampling", "rfoversample", "smotenc"]:
+            resampler = ResamplingHandler(
+                self.x_train, self.y_train,
+                random_state=self.random_state,
+                categorical_indices=self.categorical_indices,
+                cat_column_names=self.cat_column_names,
+                contains_categoricals=self.contains_categoricals,
+                encoded=self.encoded
+            )
 
-            if method == "smote":
-                self.x_train, self.y_train = resampler.apply_smote()
-            elif method == "adasyn":
-                self.x_train, self.y_train = resampler.apply_adasyn()
-            elif method == "random_undersampling":
-                self.x_train, self.y_train = resampler.apply_random_undersampling()
-            elif method == "rfoversample":
-                self.x_train, self.y_train = resampler.apply_rfoversample()
+            try:
+                if method == "smote":
+                    self.x_train, self.y_train = resampler.apply_smote()
+                elif method == "adasyn":
+                    self.x_train, self.y_train = resampler.apply_adasyn()
+                elif method == "random_undersampling":
+                    self.x_train, self.y_train = resampler.apply_random_undersampling()
+                elif method == "rfoversample":
+                    self.x_train, self.y_train = resampler.apply_rfoversample()
+                elif method == "smotenc":
+                    self.x_train, self.y_train = resampler.apply_smotenc()
+            except Exception as e:
+                print(f"[ERROR] Resampling failed for method: {method} → {e}")
+                return pd.DataFrame()
+
+            if len(self.y_train.unique()) < 2:
+                print(f"[ERROR] Only one class after resampling. Skipping model training for method: {method}")
+                return pd.DataFrame()
 
             model = RandomForestClassifier(max_depth=max_depth, random_state=self.random_state)
 
         else:
-            raise ValueError(f"Invalid method specified: {method}. Choose from ['none', 'class_weights', 'smote', 'adasyn', 'random_undersampling', 'easy_ensemble', 'rfoversample'].")
+            raise ValueError(f"Invalid method specified: {method}.")
 
-        model.fit(self.x_train, self.y_train)
-        self.model = model  
+        try:
+            model.fit(self.x_train, self.y_train)
+            self.model = model
 
-        predictions = model.predict(self.x_test)
+            predictions = model.predict(self.x_test)
+            report_dict = classification_report(self.y_test, predictions, output_dict=True)
 
-        report_dict = classification_report(self.y_test, predictions, output_dict=True)
-        report_df = pd.DataFrame(report_dict).T
+            if "weighted avg" not in report_dict:
+                print(f"[WARN] 'weighted avg' missing in report for method: {method}")
+                print("[DEBUG] Classification Report Keys:", report_dict.keys())
 
-        print("\n[INFO] Model Evaluation Complete")
-        return report_df
+            report_df = pd.DataFrame(report_dict).T
+
+            print("[INFO] Model Evaluation Complete")
+            print("[DEBUG] Report preview:\n", report_df[["precision", "recall", "f1-score"]].head())
+
+            return report_df
+
+        except Exception as e:
+            print(f"[ERROR] Evaluation failed for method: {method} → {e}")
+            return pd.DataFrame()
 
 
 class ResamplingHandler:
-    def __init__(self, x_train, y_train, random_state=42):
+    def __init__(self, x_train, y_train, random_state=42,
+                 categorical_indices=None,
+                 cat_column_names=None,
+                 contains_categoricals=False,
+                 encoded=False):
         self.x_train = x_train
         self.y_train = y_train
         self.random_state = random_state
 
+        self.categorical_indices = categorical_indices or []
+        self.cat_column_names = cat_column_names or []
+        self.contains_categoricals = contains_categoricals
+        self.encoded = encoded
+
     def apply_smote(self):
-        """Applies SMOTE and returns the resampled dataset."""
         smote = SMOTE(random_state=self.random_state)
-        x_resampled, y_resampled = smote.fit_resample(self.x_train, self.y_train)
-        return x_resampled, y_resampled
+        return smote.fit_resample(self.x_train, self.y_train)
 
     def apply_adasyn(self):
-        """Applies ADASYN and returns the resampled dataset."""
         adasyn = ADASYN(random_state=self.random_state)
-        x_resampled, y_resampled = adasyn.fit_resample(self.x_train, self.y_train)
-        return x_resampled, y_resampled
+        return adasyn.fit_resample(self.x_train, self.y_train)
 
     def apply_random_undersampling(self):
-        """Applies Random Undersampling and returns the resampled dataset."""
         rus = RandomUnderSampler(random_state=self.random_state)
-        x_resampled, y_resampled = rus.fit_resample(self.x_train, self.y_train)
-        return x_resampled, y_resampled
+        return rus.fit_resample(self.x_train, self.y_train)
+
+    def apply_smotenc(self):
+        if not self.categorical_indices:
+            raise ValueError("SMOTENC requires at least one categorical feature.")
+        smotenc = SMOTENC(
+            categorical_features=self.categorical_indices,
+            random_state=self.random_state
+        )
+        return smotenc.fit_resample(self.x_train, self.y_train)
 
     def apply_rfoversample(self):
-        """Applies RF Oversampling and returns the resampled dataset."""
-        rfoversampler = RFOversampler(self.x_train, self.y_train, num_samples=3, contains_categoricals=False, encoded=False, cat_cols=None)
-        x_resampled, y_resampled = rfoversampler.fit()
-        return x_resampled, y_resampled
+        rfoversampler = RFOversampler(
+            self.x_train,
+            self.y_train,
+            num_samples=3,
+            contains_categoricals=self.contains_categoricals,
+            encoded=self.encoded,
+            cat_cols=self.cat_column_names
+        )
+        return rfoversampler.fit()

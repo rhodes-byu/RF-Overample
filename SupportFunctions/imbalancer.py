@@ -53,6 +53,11 @@ class ImbalanceHandler:
         # Determine how many complete batches we can form
         n_batches = min(len(minority_df) // min_per_batch, len(majority_df) // maj_per_batch)
 
+        if n_batches == 0:
+            print(f"[WARN] Skipping imbalance injection: Not enough samples to form even one batch "
+                  f"(minority={len(minority_df)}, majority={len(majority_df)}, batch_size={self.batch_size})")
+            return self.x_train.copy(), self.y_train.copy()
+
         # Create batches
         batches = [
             pd.concat([
@@ -66,5 +71,7 @@ class ImbalanceHandler:
 
         X_resampled = imbalanced_df.drop(columns=[label_col])
         y_resampled = imbalanced_df[label_col]
+
+        print("[INFO] Final y_train class distribution after imbalance injection:", y_resampled.value_counts().to_dict())
+
         return X_resampled, y_resampled
-    

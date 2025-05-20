@@ -16,12 +16,15 @@ def process_plot(save_fig=False, output_dir='graphs', filename='plot.png'):
         plt.show()
 
 def extract_f1_score(report_df):
-    try:
-        if isinstance(report_df, pd.DataFrame) and "weighted avg" in report_df.index:
-            return report_df.loc["weighted avg", "f1-score"]
+    if not isinstance(report_df, pd.DataFrame):
+        print("[WARN] Report is not a DataFrame.")
         return np.nan
-    except Exception:
+    if "weighted avg" not in report_df.index:
+        print("[WARN] Missing 'weighted avg' in classification report.")
+        print(report_df)
         return np.nan
+    return report_df.loc["weighted avg", "f1-score"]
+
 
 def clean_results(results):
     valid_results = [res for res in results if "classification_report" in res]

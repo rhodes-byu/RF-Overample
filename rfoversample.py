@@ -160,5 +160,3 @@ class RFOversampler:
                                         dtype=int))).reset_index(drop=True)
 
         return x, y
-
-

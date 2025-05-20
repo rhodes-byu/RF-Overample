@@ -13,12 +13,21 @@ from SupportFunctions.apply_AA import find_minority_archetypes, merge_archetypes
 from SupportFunctions.visualizer import clean_results
 from SupportFunctions.column_dict import build_dataset_dict
 
+
 def run_cross_validation(dataset, target_column, encoding_method, method, imbalance_ratio,
                          archetype_setting, minority_sample_setting, use_archetypes,
                          n_folds, seed, random_state, categorical_indices=None):
 
-    preprocessor = DatasetPreprocessor(dataset, target_column=target_column, 
-                                       encoding_method=encoding_method, random_state=random_state, method=method, categorical_indices=categorical_indices)
+    print(f"\n[INFO] Starting CV for method '{method}' | encoding='{encoding_method}'")
+
+    preprocessor = DatasetPreprocessor(
+        dataset,
+        target_column=target_column,
+        encoding_method=encoding_method,
+        random_state=random_state,
+        method=method,
+        categorical_indices=categorical_indices
+    )
 
     X_full = pd.concat([preprocessor.x_train, preprocessor.x_test], ignore_index=True)
     Y_full = pd.concat([preprocessor.y_train, preprocessor.y_test], ignore_index=True)
@@ -26,22 +35,32 @@ def run_cross_validation(dataset, target_column, encoding_method, method, imbala
     skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
     fold_reports = []
 
-    for train_index, val_index in skf.split(X_full, Y_full):
+    for fold_idx, (train_index, val_index) in enumerate(skf.split(X_full, Y_full), start=1):
         x_train_fold = X_full.iloc[train_index]
         y_train_fold = Y_full.iloc[train_index]
         x_val_fold = X_full.iloc[val_index]
         y_val_fold = Y_full.iloc[val_index]
 
+        print(f"[INFO] Fold {fold_idx}: Original y_train distribution: {y_train_fold.value_counts().to_dict()}")
+
+        # Apply artificial imbalance
         ih = ImbalanceHandler(x_train_fold, y_train_fold, imbalance_ratio, random_state=seed)
         x_train_fold, y_train_fold = ih.introduce_imbalance()
 
+        print(f"[INFO] Fold {fold_idx}: After imbalance injection: {y_train_fold.value_counts().to_dict()}")
+
+        # Archetype augmentation if enabled
         if method in ["smote", "adasyn"] and use_archetypes:
             if "archetype_proportion" in archetype_setting:
-                archetypes = find_minority_archetypes(x_train_fold, y_train_fold,
-                                                      archetype_proportion=archetype_setting["archetype_proportion"])
+                archetypes = find_minority_archetypes(
+                    x_train_fold, y_train_fold,
+                    archetype_proportion=archetype_setting["archetype_proportion"]
+                )
             else:
-                archetypes = find_minority_archetypes(x_train_fold, y_train_fold,
-                                                      n_archetypes=archetype_setting.get("n_archetypes", 10))
+                archetypes = find_minority_archetypes(
+                    x_train_fold, y_train_fold,
+                    n_archetypes=archetype_setting.get("n_archetypes", 10)
+                )
 
             if "sample_percentage" in minority_sample_setting:
                 x_train_fold, y_train_fold = merge_archetypes_with_minority(
@@ -56,21 +75,43 @@ def run_cross_validation(dataset, target_column, encoding_method, method, imbala
                     random_state=seed
                 )
 
-        trainer = ModelTrainer(x_train_fold, y_train_fold, x_val_fold, y_val_fold, random_state=random_state)
+            print(f"[INFO] Fold {fold_idx}: After archetype merge: {y_train_fold.value_counts().to_dict()}")
+
+        trainer = ModelTrainer(
+            x_train_fold, y_train_fold, x_val_fold, y_val_fold,
+            random_state=random_state,
+            categorical_indices=categorical_indices,
+            categorical_column_names=[x_train_fold.columns[i] for i in categorical_indices] if categorical_indices else [],
+            contains_categoricals=bool(categorical_indices),
+            encoded=(encoding_method != "ordinal" and encoding_method != "none")
+        )
+
         report = trainer.train_and_evaluate(method=method)
+
+        if report is None or report.empty:
+            print(f"[WARN] Fold {fold_idx} failed or returned empty report.")
+            continue
+
         fold_reports.append(report)
+
+    if not fold_reports:
+        print(f"[ERROR] All folds failed for method '{method}' on dataset '{target_column}'. Returning empty report.")
+        return pd.DataFrame()
 
     return aggregate_fold_reports(fold_reports)
 
+
 def aggregate_fold_reports(reports):
+    if not reports:
+        return pd.DataFrame()
     aggregated = pd.concat(reports, axis=0)
     return aggregated.groupby(aggregated.index).mean()
+
 
 def run_experiment(config):
     full_dataset_dict = build_dataset_dict(config.get("dataset_folder", "datasets"))
     selected_names = config.get("selected_datasets", [])
 
-    # Filter to selected datasets
     all_datasets = {
         name: full_dataset_dict[name]
         for name in selected_names if name in full_dataset_dict
@@ -97,7 +138,7 @@ def run_experiment(config):
                                         jobs.append({
                                             "dataset_name": dataset_name,
                                             "dataset": dataset,
-                                            "cat_cols": cat_indices,
+                                            "categorical_indices": cat_indices,
                                             "encoding_method": enc,
                                             "method": method,
                                             "imbalance_ratio": ratio,
@@ -126,6 +167,10 @@ def run_experiment(config):
                 random_state=job_config["random_state"],
                 categorical_indices=job_config["categorical_indices"]
             )
+
+            if cv_report is None or cv_report.empty:
+                print(f"[WARN] No valid report returned for dataset '{job_config['dataset_name']}' and method '{job_config['method']}'.")
+
             return {
                 "classification_report": cv_report,
                 "dataset": job_config["dataset_name"],
@@ -138,6 +183,7 @@ def run_experiment(config):
                 "iteration_seed": job_config["seed"]
             }
         except Exception as e:
+            print(f"[ERROR] Job failed: {e}")
             return {
                 "classification_report": None,
                 "dataset": job_config["dataset_name"],
@@ -157,4 +203,5 @@ def run_experiment(config):
 
     results_df = clean_results(results)
     dump(results_df, config.get("results_file", "experiment_results.pkl"))
+    print(f"[INFO] Experiment results saved to {config.get('results_file', 'experiment_results.pkl')}")
     return results_df
