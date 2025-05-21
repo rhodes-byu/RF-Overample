@@ -41,9 +41,8 @@ class ModelTrainer:
         print(f"\n[INFO] Training with method: {method.upper()}")
         print("Class distribution before training:\n", self.y_train.value_counts(normalize=True))
 
-        # Check for single-class training data
         if len(self.y_train.unique()) < 2:
-            print(f"[ERROR] Only one class present in y_train. Skipping training for method: {method}")
+            print("[WARN] Only one class in training data. Skipping model training.")
             return pd.DataFrame()
 
         if method == "none":

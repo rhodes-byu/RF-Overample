@@ -4,7 +4,7 @@ import os
 if __name__ == "__main__":
     config = {
         "dataset_folder": "datasets",
-        "selected_datasets": [f.split(".")[0] for f in os.listdir("datasets") if f.endswith(".csv")],
+        "selected_datasets": ['diabetes'],
         "methods": ['none', 'class_weights', 'smote', 'adasyn', 'random_undersampling', 'rfoversample', 'smotenc'],
         "imbalance_ratios": [0.2],
         "encoding_methods": ["onehot"], # or ordinal

@@ -34,9 +34,9 @@ class DatasetPreprocessor:
         x = self.dataset.drop(columns=[self.target_column])
         y = self.dataset[self.target_column]
 
-        # Resolve categorical column names
-        if self.categorical_indices is not None:
-            assert max(self.categorical_indices) < x.shape[1], "Categorical index out of range."
+        if self.categorical_indices:
+            if max(self.categorical_indices) >= x.shape[1]:
+                raise ValueError("Categorical index out of range.")
             self.cat_column_names = [x.columns[i] for i in self.categorical_indices]
         else:
             self.cat_column_names = list(x.select_dtypes(include=["object", "category"]).columns)

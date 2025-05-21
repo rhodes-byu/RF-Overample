@@ -11,7 +11,6 @@ from SupportFunctions.prepare_datasets import DatasetPreprocessor
 from SupportFunctions.load_datasets import load_datasets
 from SupportFunctions.apply_AA import find_minority_archetypes, merge_archetypes_with_minority
 from SupportFunctions.visualizer import clean_results
-from SupportFunctions.column_dict import build_dataset_dict
 
 
 def run_cross_validation(dataset, target_column, encoding_method, method, imbalance_ratio,

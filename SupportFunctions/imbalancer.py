@@ -32,6 +32,11 @@ class ImbalanceHandler:
 
         # Identify class splits
         class_counts = self.y_train.value_counts()
+
+        if class_counts.empty or len(class_counts) < 2:
+            print("[WARN] Cannot introduce imbalance: less than 2 classes found.")
+            return self.x_train.copy(), self.y_train.copy()
+
         minority_class = class_counts.idxmin()
         majority_class = class_counts.idxmax()
 
