@@ -26,11 +26,10 @@ class ImbalanceHandler:
         Returns:
             Tuple[pd.DataFrame, pd.Series]: Features and labels of the imbalanced training set.
         """
-        # Combine features and labels
+        
         full_df = pd.concat([self.x_train, self.y_train.to_frame()], axis=1)
         label_col = self.y_train.name
 
-        # Identify class splits
         class_counts = self.y_train.value_counts()
 
         if class_counts.empty or len(class_counts) < 2:
@@ -40,10 +39,15 @@ class ImbalanceHandler:
         minority_class = class_counts.idxmin()
         majority_class = class_counts.idxmax()
 
+        print(f"[DEBUG] Initial class distribution: {class_counts.to_dict()}")
+        initial_total = len(self.y_train)
+        initial_minority_count = class_counts[minority_class]
+        print(f"[DEBUG] Initial total: {initial_total}, minority count: {initial_minority_count}, "
+              f"minority ratio: {initial_minority_count / initial_total:.3f}")
+
         minority_df = full_df[full_df[label_col] == minority_class]
         majority_df = full_df[full_df[label_col] == majority_class]
 
-        # Helper to trim class size to multiple of batch_size
         def trim_to_batches(df):
             usable_n = (len(df) // self.batch_size) * self.batch_size
             return resample(df, replace=False, n_samples=usable_n, random_state=self.random_state)
@@ -51,11 +55,9 @@ class ImbalanceHandler:
         minority_df = trim_to_batches(minority_df)
         majority_df = trim_to_batches(majority_df)
 
-        # Calculate per-batch class counts
         min_per_batch = int(self.batch_size * self.imbalance_ratio)
         maj_per_batch = self.batch_size - min_per_batch
 
-        # Determine how many complete batches we can form
         n_batches = min(len(minority_df) // min_per_batch, len(majority_df) // maj_per_batch)
 
         if n_batches == 0:
@@ -63,7 +65,6 @@ class ImbalanceHandler:
                   f"(minority={len(minority_df)}, majority={len(majority_df)}, batch_size={self.batch_size})")
             return self.x_train.copy(), self.y_train.copy()
 
-        # Create batches
         batches = [
             pd.concat([
                 resample(minority_df, n_samples=min_per_batch, replace=False, random_state=self.random_state),
@@ -77,6 +78,12 @@ class ImbalanceHandler:
         X_resampled = imbalanced_df.drop(columns=[label_col])
         y_resampled = imbalanced_df[label_col]
 
-        print("[INFO] Final y_train class distribution after imbalance injection:", y_resampled.value_counts().to_dict())
+        final_counts = y_resampled.value_counts()
+        final_total = len(y_resampled)
+        final_minority_count = final_counts[minority_class]
+
+        print(f"[DEBUG] Final class distribution: {final_counts.to_dict()}")
+        print(f"[DEBUG] Final total: {final_total}, minority count: {final_minority_count}, "
+              f"minority ratio: {final_minority_count / final_total:.3f}")
 
         return X_resampled, y_resampled

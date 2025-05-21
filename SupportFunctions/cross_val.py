@@ -8,7 +8,7 @@ from sklearn.model_selection import StratifiedKFold
 from SupportFunctions.model_trainer import ModelTrainer, ResamplingHandler
 from SupportFunctions.imbalancer import ImbalanceHandler
 from SupportFunctions.prepare_datasets import DatasetPreprocessor
-from SupportFunctions.load_datasets import load_datasets
+from SupportFunctions.load_datasets import load_selected_datasets
 from SupportFunctions.apply_AA import find_minority_archetypes, merge_archetypes_with_minority
 from SupportFunctions.visualizer import clean_results
 
@@ -18,6 +18,13 @@ def run_cross_validation(dataset, target_column, encoding_method, method, imbala
                          n_folds, seed, random_state, categorical_indices=None):
 
     print(f"\n[INFO] Starting CV for method '{method}' | encoding='{encoding_method}'")
+
+    if method == "baseline":
+        apply_imbalance = False
+        apply_archetypes = False
+    else:
+        apply_imbalance = True
+        apply_archetypes = method in ["smote", "adasyn"] and use_archetypes
 
     preprocessor = DatasetPreprocessor(
         dataset,
@@ -42,14 +49,14 @@ def run_cross_validation(dataset, target_column, encoding_method, method, imbala
 
         print(f"[INFO] Fold {fold_idx}: Original y_train distribution: {y_train_fold.value_counts().to_dict()}")
 
-        # Apply artificial imbalance
-        ih = ImbalanceHandler(x_train_fold, y_train_fold, imbalance_ratio, random_state=seed)
-        x_train_fold, y_train_fold = ih.introduce_imbalance()
+        # --- Imbalance injection ---
+        if apply_imbalance:
+            ih = ImbalanceHandler(x_train_fold, y_train_fold, imbalance_ratio, random_state=seed)
+            x_train_fold, y_train_fold = ih.introduce_imbalance()
+            print(f"[INFO] Fold {fold_idx}: After imbalance injection: {y_train_fold.value_counts().to_dict()}")
 
-        print(f"[INFO] Fold {fold_idx}: After imbalance injection: {y_train_fold.value_counts().to_dict()}")
-
-        # Archetype augmentation if enabled
-        if method in ["smote", "adasyn"] and use_archetypes:
+        # --- Archetype augmentation ---
+        if apply_archetypes:
             if "archetype_proportion" in archetype_setting:
                 archetypes = find_minority_archetypes(
                     x_train_fold, y_train_fold,
@@ -99,24 +106,33 @@ def run_cross_validation(dataset, target_column, encoding_method, method, imbala
 
     return aggregate_fold_reports(fold_reports)
 
-
 def aggregate_fold_reports(reports):
     if not reports:
         return pd.DataFrame()
     aggregated = pd.concat(reports, axis=0)
     return aggregated.groupby(aggregated.index).mean()
 
-
 def run_experiment(config):
-    full_dataset_dict = build_dataset_dict(config.get("dataset_folder", "datasets"))
-    selected_names = config.get("selected_datasets", [])
-
-    all_datasets = {
-        name: full_dataset_dict[name]
-        for name in selected_names if name in full_dataset_dict
-    }
-
+    all_datasets = load_selected_datasets(config)
     jobs = []
+
+    for dataset_name, dataset_entry in all_datasets.items():
+        jobs.append({
+            "dataset_name": dataset_name,
+            "dataset": dataset_entry["data"],
+            "categorical_indices": dataset_entry["categorical_indices"],
+            "encoding_method": "onehot",
+            "method": "baseline",
+            "imbalance_ratio": None,
+            "archetype_setting": None,
+            "minority_sample_setting": None,
+            "use_archetypes": False,
+            "seed": 0,
+            "n_folds": config.get("n_folds", 1),
+            "random_state": config.get("random_state", 42)
+        })
+
+    # Experimental jobs: apply methods, imbalance, and archetypes based on config
     n_iterations = config.get("n_iterations", 1)
     use_archetypes = config.get("use_archetypes", [True])
     if not isinstance(use_archetypes, list):
@@ -128,8 +144,17 @@ def run_experiment(config):
             for dataset_name, dataset_entry in all_datasets.items():
                 dataset = dataset_entry["data"]
                 cat_indices = dataset_entry["categorical_indices"]
-                for enc in config.get("encoding_methods", ["onehot"]):
-                    for method in config.get("methods", ["none"]):
+
+                for method in config.get("methods", ["none"]):
+                    if method in ["rfoversample", "smotenc"]:
+                        valid_encodings = ["ordinal"]
+                    else:
+                        valid_encodings = config.get("encoding_methods", ["onehot"])
+
+                    if method == "smotenc" and not cat_indices:
+                        continue
+
+                    for enc in valid_encodings:
                         if method != "archetypal" or use_arch:
                             for ratio in config.get("imbalance_ratios", [0.1]):
                                 for arch_setting in config.get("archetype_settings", [{"archetype_proportion": 0.2}]):

@@ -41,36 +41,17 @@ class DatasetPreprocessor:
         else:
             self.cat_column_names = list(x.select_dtypes(include=["object", "category"]).columns)
 
-        print(f"[DEBUG] Detected categorical columns: {self.cat_column_names}")
+        effective_encoding = (
+            "ordinal" if self.method in ["rfoversample", "smotenc"]
+            else self.encoding_method
+        )
 
-        if self.method == "smotenc":
-            if not self.cat_column_names:
-                print("[WARN] SMOTENC selected, but no categorical columns found. Proceeding without encoding.")
-            else:
-                x[self.cat_column_names] = x[self.cat_column_names].apply(lambda col: col.astype("category").cat.codes)
-            
-            self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(
-                x, y, test_size=self.test_size, random_state=self.random_state
-            )
-            print(f"[INFO] Split completed. Train class distribution: {self.y_train.value_counts().to_dict()}")
-            print(f"[INFO] Test class distribution: {self.y_test.value_counts().to_dict()}")
-            return
-
-        elif self.method == "rfoversample":
-            self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(
-                x, y, test_size=self.test_size, random_state=self.random_state
-            )
-            print(f"[INFO] Split completed. Train class distribution: {self.y_train.value_counts().to_dict()}")
-            print(f"[INFO] Test class distribution: {self.y_test.value_counts().to_dict()}")
-            return
-
-        # Apply encoding if required
-        if self.encoding_method == "ordinal":
+        if effective_encoding == "ordinal":
             if self.cat_column_names:
                 x[self.cat_column_names] = x[self.cat_column_names].apply(lambda col: col.astype("category").cat.codes)
             self.label_encoded_x = x.copy()
 
-        elif self.encoding_method == "onehot":
+        elif effective_encoding == "onehot":
             x = pd.get_dummies(x, columns=self.cat_column_names, drop_first=True)
 
         else:
@@ -79,5 +60,3 @@ class DatasetPreprocessor:
         self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(
             x, y, test_size=self.test_size, random_state=self.random_state
         )
-        print(f"[INFO] Split completed. Train class distribution: {self.y_train.value_counts().to_dict()}")
-        print(f"[INFO] Test class distribution: {self.y_test.value_counts().to_dict()}")

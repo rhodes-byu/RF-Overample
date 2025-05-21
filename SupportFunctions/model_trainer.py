@@ -35,17 +35,13 @@ class ModelTrainer:
         self.x_train = self.imbalanced_x_train.copy()
         self.y_train = self.imbalanced_y_train.copy()
 
-    def train_and_evaluate(self, method="none", max_depth=5, n_estimators=100):
+    def train_and_evaluate(self, method="none", max_depth=None, n_estimators=100):
         self.reset_training_data()
 
-        print(f"\n[INFO] Training with method: {method.upper()}")
-        print("Class distribution before training:\n", self.y_train.value_counts(normalize=True))
-
         if len(self.y_train.unique()) < 2:
-            print("[WARN] Only one class in training data. Skipping model training.")
             return pd.DataFrame()
 
-        if method == "none":
+        if method == "none" or method == "baseline":
             model = RandomForestClassifier(max_depth=max_depth, random_state=self.random_state)
 
         elif method == "class_weights":
@@ -77,7 +73,6 @@ class ModelTrainer:
                 return pd.DataFrame()
 
             if len(self.y_train.unique()) < 2:
-                print(f"[ERROR] Only one class after resampling. Skipping model training for method: {method}")
                 return pd.DataFrame()
 
             model = RandomForestClassifier(max_depth=max_depth, random_state=self.random_state)
@@ -93,15 +88,12 @@ class ModelTrainer:
             report_dict = classification_report(self.y_test, predictions, output_dict=True)
 
             if "weighted avg" not in report_dict:
-                print(f"[WARN] 'weighted avg' missing in report for method: {method}")
-                print("[DEBUG] Classification Report Keys:", report_dict.keys())
-
-            report_df = pd.DataFrame(report_dict).T
-
-            print("[INFO] Model Evaluation Complete")
-            print("[DEBUG] Report preview:\n", report_df[["precision", "recall", "f1-score"]].head())
-
-            return report_df
+                return pd.DataFrame()
+            weighted_metrics = report_dict.get("weighted avg", {})
+            if not all(weighted_metrics.get(metric, 0) > 0 for metric in ['precision', 'recall', 'f1-score']):
+                return pd.DataFrame()
+            
+            return pd.DataFrame(report_dict).T
 
         except Exception as e:
             print(f"[ERROR] Evaluation failed for method: {method} → {e}")

@@ -17,14 +17,10 @@ def process_plot(save_fig=False, output_dir='graphs', filename='plot.png'):
 
 def extract_f1_score(report_df):
     if not isinstance(report_df, pd.DataFrame):
-        print("[WARN] Report is not a DataFrame.")
         return np.nan
     if "weighted avg" not in report_df.index:
-        print("[WARN] Missing 'weighted avg' in classification report.")
-        print(report_df)
         return np.nan
     return report_df.loc["weighted avg", "f1-score"]
-
 
 def clean_results(results):
     valid_results = [res for res in results if "classification_report" in res]
@@ -42,6 +38,7 @@ def clean_results(results):
         "use_archetypes": "Use Archetypes"
     }, inplace=True)
 
+    # Convert settings to string for grouping
     if "Minority Sample Setting" in results_df.columns:
         results_df["Minority Sample Setting"] = results_df["Minority Sample Setting"].astype(str)
     if "Archetype Setting" in results_df.columns:
@@ -51,12 +48,12 @@ def clean_results(results):
         if col not in results_df.columns:
             results_df[col] = "N/A"
 
+    # Fix baseline for grouping
+    results_df["Imbalance Ratio"] = results_df["Imbalance Ratio"].fillna("None")
+
     return results_df
 
 def annotate_bars(ax):
-    """
-    Annotates each bar in a bar chart with its height (F1 score value).
-    """
     for container in ax.containers:
         ax.bar_label(container, fmt="%.3f", padding=3, fontsize=9)
 
@@ -66,6 +63,10 @@ def plot_f1_scores(results_df, save_fig=False, output_dir='graphs'):
         df = results_df[results_df["Dataset"] == dataset]
         pivot = df.groupby(["Method", "Imbalance Ratio"])["Weighted F1 Score"].mean().unstack("Imbalance Ratio").fillna(0)
 
+        # Sort columns with 'None' (baseline) first
+        sorted_cols = sorted(pivot.columns, key=lambda x: (x != "None", str(x)))
+        pivot = pivot[sorted_cols]
+
         ax = pivot.plot(kind="bar", figsize=(12, 7))
         annotate_bars(ax)
 
@@ -73,7 +74,7 @@ def plot_f1_scores(results_df, save_fig=False, output_dir='graphs'):
         plt.xlabel("Resampling Method", fontsize=12)
         plt.ylabel("Weighted F1 Score", fontsize=12)
         plt.ylim(0, 1)
-        plt.legend(title="Imbalance Ratio")
+        plt.legend(title="Imbalance Ratio (None = Baseline)")
         plt.grid(axis="y", linestyle="--", alpha=0.7)
         plt.tight_layout()
 
@@ -182,3 +183,23 @@ if __name__ == "__main__":
         plot_f1_by_use_of_archetypes(results_df, save_fig=True)
     else:
         print(f"Results file '{results_file}' not found. Please run runner.py first to generate experiment results.")
+
+if __name__ == "__main__":
+    results_file = "experiment_results.pkl"
+
+    if os.path.exists(results_file):
+        results_df = load(results_file)
+        print("Loaded experiment results from", results_file)
+
+        print(results_df[["Dataset", "Encoding Method", "Method", "Imbalance Ratio",
+                          "Archetype Setting", "Minority Sample Setting", "Weighted F1 Score"]])
+
+        plot_f1_scores(results_df, save_fig=True)
+        plot_f1_by_encoding(results_df, save_fig=True)
+        plot_f1_by_archetype_setting(results_df, save_fig=True)
+        plot_f1_by_minority_sample_setting(results_df, save_fig=True)
+        plot_f1_by_use_of_archetypes(results_df, save_fig=True)
+    else:
+        print(f"Results file '{results_file}' not found. Please run runner.py first to generate experiment results.")
+
+

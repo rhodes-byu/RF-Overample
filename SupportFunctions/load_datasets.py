@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import joblib
 
 categorical_cols = {
     'artificial_tree': None,
@@ -34,15 +35,13 @@ categorical_cols = {
     'zoo': 'all'
 }
 
-def load_and_prepare_datasets(folder_path="datasets", selected_datasets=None):
+# |---| Create pickled datasets
+def load_and_prepare_datasets(folder_path="datasets"):
     dataset_dict = {}
 
     for file in os.listdir(folder_path):
         if file.endswith('.csv'):
             dataset_name = os.path.splitext(file)[0]
-
-            if selected_datasets is not None and dataset_name not in selected_datasets:
-                continue
 
             file_path = os.path.join(folder_path, file)
 
@@ -63,10 +62,41 @@ def load_and_prepare_datasets(folder_path="datasets", selected_datasets=None):
                     "categorical_indices": cat_indices
                 }
 
-                print(f"Loaded: {file} ({df.shape[0]} rows, {df.shape[1]} columns)")
+                print(f"Loaded: {dataset_name} ({df.shape[0]} rows, {df.shape[1]} columns)")
 
             except Exception as e:
                 print(f"Failed to load '{file}': {e}")
 
-    print(f"\nTotal datasets loaded successfully: {len(dataset_dict)}")
+    print(f"\nTotal datasets loaded: {len(dataset_dict)}")
     return dataset_dict
+
+# |---| Load selected datasets from pickle
+def load_selected_datasets(config, pickle_path="prepared_datasets.pkl"):
+
+    if not os.path.exists(pickle_path):
+        raise FileNotFoundError(f"Pickle file not found at: {pickle_path}")
+
+    with open(pickle_path, "rb") as f:
+        all_datasets = joblib.load(f)
+
+    selected_names = config.get("selected_datasets", [])
+
+    if isinstance(selected_names, str) and selected_names.lower() == "all":
+        selected_names = list(all_datasets.keys())
+
+    selected_data = {}
+    for name in selected_names:
+        if name in all_datasets:
+            selected_data[name] = all_datasets[name]
+        else:
+            raise KeyError(f"Dataset '{name}' not found in {pickle_path}")
+
+    return selected_data
+
+
+# |---| Entry point: generate pickle
+if __name__ == "__main__":
+    output_path = "prepared_datasets.pkl"
+    datasets = load_and_prepare_datasets()
+    joblib.dump(datasets, output_path)
+    print(f"\n Saved preprocessed datasets to: {output_path}")
