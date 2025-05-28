@@ -38,6 +38,7 @@ class RFOversampler:
         """
 
         numof_cat_cols = 0
+        numof_num_cols = 0
 
         #make a dictionary with each categorical column and its unique values. This will be useful further down the line
         cat_dict = {}
@@ -57,7 +58,7 @@ class RFOversampler:
                             numof_cat_cols += 1
 
                 cat_dict = encoded_groups  # Store the grouped one-hot column names
-                numof_num_cols = len(self.Data.columns) - numof_cat_cols - 1 #calculate number of numerical columns (-1 for target variable)
+        numof_num_cols = len(self.Data.columns) - numof_cat_cols - 1 #calculate number of numerical columns (-1 for target variable)
 
         x = None
         y = None
