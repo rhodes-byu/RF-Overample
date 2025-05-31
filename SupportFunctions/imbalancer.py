@@ -1,10 +1,10 @@
 import pandas as pd
-from sklearn.utils import resample, check_random_state
+from sklearn.utils import check_random_state, resample
 
 class ImbalanceHandler:
-    def __init__(self, x_train, y_train, imbalance_ratio=0.2, batch_size=20, random_state=42):
+    def __init__(self, x_train, y_train, imbalance_ratio=0.2, batch_size=100, random_state=42, min_minority_samples=20):
         """
-        Handles creation of an imbalanced dataset with a given ratio and batch constraints.
+        Handles creation of an imbalanced dataset by resampling with replacement.
 
         Args:
             x_train (pd.DataFrame): Training feature set.
@@ -12,78 +12,59 @@ class ImbalanceHandler:
             imbalance_ratio (float): Desired minority class ratio per batch (e.g., 0.2 for 20%).
             batch_size (int): Total size of each resampled batch.
             random_state (int or RandomState): Random seed or instance.
+            min_minority_samples (int): Minimum number of samples to retain for the minority class.
         """
         self.x_train = x_train
         self.y_train = y_train
         self.imbalance_ratio = imbalance_ratio
         self.batch_size = batch_size
         self.random_state = check_random_state(random_state)
+        self.min_minority_samples = min_minority_samples
 
     def introduce_imbalance(self):
         """
-        Resamples the dataset to achieve the specified class imbalance across fixed-size batches.
+        Introduces class imbalance by manually resampling with replacement.
 
         Returns:
             Tuple[pd.DataFrame, pd.Series]: Features and labels of the imbalanced training set.
         """
-        
-        full_df = pd.concat([self.x_train, self.y_train.to_frame()], axis=1)
-        label_col = self.y_train.name
-
-        class_counts = self.y_train.value_counts()
+        y = self.y_train
+        X = self.x_train
+        full_df = pd.concat([X, y], axis=1)
+        label_col = y.name
+        class_counts = y.value_counts()
 
         if class_counts.empty or len(class_counts) < 2:
-            print("[WARN] Cannot introduce imbalance: less than 2 classes found.")
-            return self.x_train.copy(), self.y_train.copy()
+            return X.copy(), y.copy()
 
-        minority_class = class_counts.idxmin()
-        majority_class = class_counts.idxmax()
+        print(f"Original class distribution: {class_counts.to_dict()}")
 
-        print(f"[DEBUG] Initial class distribution: {class_counts.to_dict()}")
-        initial_total = len(self.y_train)
-        initial_minority_count = class_counts[minority_class]
-        print(f"[DEBUG] Initial total: {initial_total}, minority count: {initial_minority_count}, "
-              f"minority ratio: {initial_minority_count / initial_total:.3f}")
+        sorted_classes = class_counts.sort_values().index.tolist()
+        minority_class = sorted_classes[0]
+        other_classes = [cls for cls in sorted_classes if cls != minority_class]
 
+        # Determine number of minority samples
+        min_samples = max(int(self.batch_size * self.imbalance_ratio), self.min_minority_samples)
+        samples_remaining = self.batch_size - min_samples
+        per_other_class = samples_remaining // len(other_classes)
+
+        sampled_frames = []
+
+        # Resample minority class
         minority_df = full_df[full_df[label_col] == minority_class]
-        majority_df = full_df[full_df[label_col] == majority_class]
+        sampled_frames.append(resample(minority_df, replace=True, n_samples=min_samples, random_state=self.random_state))
 
-        def trim_to_batches(df):
-            usable_n = (len(df) // self.batch_size) * self.batch_size
-            return resample(df, replace=False, n_samples=usable_n, random_state=self.random_state)
+        # Resample other classes
+        for cls in other_classes:
+            cls_df = full_df[full_df[label_col] == cls]
+            sampled_frames.append(resample(cls_df, replace=True, n_samples=per_other_class, random_state=self.random_state))
 
-        minority_df = trim_to_batches(minority_df)
-        majority_df = trim_to_batches(majority_df)
+        result_df = pd.concat(sampled_frames, axis=0).sample(frac=1, random_state=self.random_state).reset_index(drop=True)
 
-        min_per_batch = int(self.batch_size * self.imbalance_ratio)
-        maj_per_batch = self.batch_size - min_per_batch
-
-        n_batches = min(len(minority_df) // min_per_batch, len(majority_df) // maj_per_batch)
-
-        if n_batches == 0:
-            print(f"[WARN] Skipping imbalance injection: Not enough samples to form even one batch "
-                  f"(minority={len(minority_df)}, majority={len(majority_df)}, batch_size={self.batch_size})")
-            return self.x_train.copy(), self.y_train.copy()
-
-        batches = [
-            pd.concat([
-                resample(minority_df, n_samples=min_per_batch, replace=False, random_state=self.random_state),
-                resample(majority_df, n_samples=maj_per_batch, replace=False, random_state=self.random_state)
-            ])
-            for _ in range(n_batches)
-        ]
-
-        imbalanced_df = pd.concat(batches).sample(frac=1, random_state=self.random_state).reset_index(drop=True)
-
-        X_resampled = imbalanced_df.drop(columns=[label_col])
-        y_resampled = imbalanced_df[label_col]
+        X_resampled = result_df.drop(columns=[label_col])
+        y_resampled = result_df[label_col]
 
         final_counts = y_resampled.value_counts()
-        final_total = len(y_resampled)
-        final_minority_count = final_counts[minority_class]
-
-        print(f"[DEBUG] Final class distribution: {final_counts.to_dict()}")
-        print(f"[DEBUG] Final total: {final_total}, minority count: {final_minority_count}, "
-              f"minority ratio: {final_minority_count / final_total:.3f}")
+        print(f"Imbalanced class distribution: {final_counts.to_dict()}")
 
         return X_resampled, y_resampled
