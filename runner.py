@@ -5,7 +5,7 @@ if __name__ == "__main__":
     config = {
 
         # Datasets and Methods
-        "selected_datasets": ['seeds'],
+        "selected_datasets": "all", #['seeds']
         "methods": ['none', 'class_weights', 'smote', 'adasyn', 'random_undersampling', 'rfoversample', 'smotenc'],
         "encoding_methods": ["ordinal"],  # onehot
         "imbalance_ratios": [0.2],

@@ -49,13 +49,13 @@ def run_cross_validation(dataset, target_column, encoding_method, method, imbala
 
         print(f"[INFO] Fold {fold_idx}: Original y_train distribution: {y_train_fold.value_counts().to_dict()}")
 
-        # --- Imbalance injection ---
+        # - Imbalancer - 
         if apply_imbalance:
             ih = ImbalanceHandler(x_train_fold, y_train_fold, imbalance_ratio, random_state=seed)
             x_train_fold, y_train_fold = ih.introduce_imbalance()
             print(f"[INFO] Fold {fold_idx}: After imbalance injection: {y_train_fold.value_counts().to_dict()}")
 
-        # --- Archetype augmentation ---
+        # - Archetypes -
         if apply_archetypes:
             if "archetype_proportion" in archetype_setting:
                 archetypes = find_minority_archetypes(
