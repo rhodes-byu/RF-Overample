@@ -28,5 +28,4 @@ categorical_cols = {
     'treeData': None,
     'waveform': None,
     'wine': None,
-    'zoo': 'all'
 }

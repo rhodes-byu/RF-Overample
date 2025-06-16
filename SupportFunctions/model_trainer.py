@@ -1,12 +1,15 @@
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, f1_score
+from sklearn.preprocessing import LabelEncoder
 from imblearn.over_sampling import SMOTE, ADASYN, SMOTENC
 from imblearn.under_sampling import RandomUnderSampler
+
 import sys
 sys.path.append("../")
 from rfoversample import RFOversampler
+
 
 
 class ModelTrainer:
@@ -35,7 +38,7 @@ class ModelTrainer:
         self.x_train = self.imbalanced_x_train.copy()
         self.y_train = self.imbalanced_y_train.copy()
 
-    def train_and_evaluate(self, method="none", max_depth=None, n_estimators=100):
+    def train_and_evaluate(self, method="none", max_depth=None):
         self.reset_training_data()
 
         if len(self.y_train.unique()) < 2:
@@ -92,8 +95,15 @@ class ModelTrainer:
             weighted_metrics = report_dict.get("weighted avg", {})
             if not all(weighted_metrics.get(metric, 0) > 0 for metric in ['precision', 'recall', 'f1-score']):
                 return pd.DataFrame()
-            
-            return pd.DataFrame(report_dict).T
+
+            weighted_f1 = f1_score(self.y_test, predictions, average="weighted")
+
+            df_report = pd.DataFrame(report_dict).T
+            df_report.index.name = "class"
+            df_report.reset_index(inplace=True)
+            df_report["Weighted F1 Score"] = np.where(df_report["class"] == "weighted avg", weighted_f1, np.nan)
+
+            return df_report
 
         except Exception as e:
             print(f"[ERROR] Evaluation failed for method: {method} → {e}")
@@ -137,12 +147,20 @@ class ResamplingHandler:
         return smotenc.fit_resample(self.x_train, self.y_train)
 
     def apply_rfoversample(self):
+
+        self.label_encoder = LabelEncoder()
+        y_encoded = pd.Series(self.label_encoder.fit_transform(self.y_train), index=self.y_train.index)
+
         rfoversampler = RFOversampler(
             self.x_train,
-            self.y_train,
+            y_encoded,
             num_samples=3,
             contains_categoricals=self.contains_categoricals,
             encoded=self.encoded,
             cat_cols=self.cat_column_names
         )
-        return rfoversampler.fit()
+        x_resampled, y_resampled_encoded = rfoversampler.fit()
+
+        y_resampled = pd.Series(self.label_encoder.inverse_transform(y_resampled_encoded.astype(int)), index=y_resampled_encoded.index)
+
+        return x_resampled, y_resampled

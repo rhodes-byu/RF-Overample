@@ -1,231 +1,200 @@
-import os
-import re
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed, dump
 from sklearn.model_selection import StratifiedKFold
 
-from SupportFunctions.model_trainer import ModelTrainer, ResamplingHandler
+# Custom Support Functions
+from SupportFunctions.model_trainer import ModelTrainer
 from SupportFunctions.imbalancer import ImbalanceHandler
 from SupportFunctions.prepare_datasets import DatasetPreprocessor
 from SupportFunctions.load_datasets import load_selected_datasets
-from SupportFunctions.apply_AA import find_minority_archetypes, merge_archetypes_with_minority
+from SupportFunctions.apply_AA import (
+    find_minority_archetypes,
+    merge_archetypes_with_minority,
+)
 from SupportFunctions.visualizer import clean_results
 
 
-def run_cross_validation(dataset, target_column, encoding_method, method, imbalance_ratio,
-                         archetype_setting, minority_sample_setting, use_archetypes,
-                         n_folds, seed, random_state, categorical_indices=None):
+def run_cross_validation(
+    dataset,
+    target_column,
+    encoding_method,
+    method,
+    imbalance_ratio,
+    archetype_setting,
+    minority_sample_setting,
+    use_archetypes,
+    n_folds,
+    seed,
+    categorical_indices=None,
+):
+    """Return one DataFrame row per fold, tagged with seed & fold."""
+    print(
+        f"\n[INFO] CV | method={method:>15s}  enc={encoding_method:<7s} "
+        f"seed={seed}"
+    )
 
-    print(f"\n[INFO] Starting CV for method '{method}' | encoding='{encoding_method}'")
+    apply_imbalance = method != "baseline"
+    apply_archetypes = use_archetypes and method in {"smote", "adasyn"}
 
-    if method == "baseline":
-        apply_imbalance = False
-        apply_archetypes = False
-    else:
-        apply_imbalance = True
-        apply_archetypes = method in ["smote", "adasyn"] and use_archetypes
-
-    preprocessor = DatasetPreprocessor(
+    pre = DatasetPreprocessor(
         dataset,
         target_column=target_column,
         encoding_method=encoding_method,
-        random_state=random_state,
+        random_state=seed,
         method=method,
-        categorical_indices=categorical_indices
+        categorical_indices=categorical_indices,
     )
-
-    X_full = pd.concat([preprocessor.x_train, preprocessor.x_test], ignore_index=True)
-    Y_full = pd.concat([preprocessor.y_train, preprocessor.y_test], ignore_index=True)
+    X_full = pd.concat([pre.x_train, pre.x_test], ignore_index=True)
+    y_full = pd.concat([pre.y_train, pre.y_test], ignore_index=True)
 
     skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
     fold_reports = []
 
-    for fold_idx, (train_index, val_index) in enumerate(skf.split(X_full, Y_full), start=1):
-        x_train_fold = X_full.iloc[train_index]
-        y_train_fold = Y_full.iloc[train_index]
-        x_val_fold = X_full.iloc[val_index]
-        y_val_fold = Y_full.iloc[val_index]
+    for fold, (tri, tei) in enumerate(skf.split(X_full, y_full), start=1):
+        x_tr, y_tr = X_full.iloc[tri], y_full.iloc[tri]
+        x_te, y_te = X_full.iloc[tei], y_full.iloc[tei]
 
-        print(f"[INFO] Fold {fold_idx}: Original y_train distribution: {y_train_fold.value_counts().to_dict()}")
-
-        # - Imbalancer - 
         if apply_imbalance:
-            ih = ImbalanceHandler(x_train_fold, y_train_fold, imbalance_ratio, random_state=seed)
-            x_train_fold, y_train_fold = ih.introduce_imbalance()
-            print(f"[INFO] Fold {fold_idx}: After imbalance injection: {y_train_fold.value_counts().to_dict()}")
+            ih = ImbalanceHandler(
+                x_tr,
+                y_tr,
+                imbalance_ratio=imbalance_ratio,
+                random_state=seed,
+            )
+            x_tr, y_tr = ih.introduce_imbalance()
 
-        # - Archetypes -
         if apply_archetypes:
-            if "archetype_proportion" in archetype_setting:
-                archetypes = find_minority_archetypes(
-                    x_train_fold, y_train_fold,
-                    archetype_proportion=archetype_setting["archetype_proportion"]
-                )
-            else:
-                archetypes = find_minority_archetypes(
-                    x_train_fold, y_train_fold,
-                    n_archetypes=archetype_setting.get("n_archetypes", 10)
-                )
-
-            if "sample_percentage" in minority_sample_setting:
-                x_train_fold, y_train_fold = merge_archetypes_with_minority(
-                    x_train_fold, y_train_fold, archetypes,
-                    sample_percentage=minority_sample_setting["sample_percentage"],
-                    random_state=seed
-                )
-            else:
-                x_train_fold, y_train_fold = merge_archetypes_with_minority(
-                    x_train_fold, y_train_fold, archetypes,
-                    sample_number=minority_sample_setting.get("sample_number", 0),
-                    random_state=seed
-                )
-
-            print(f"[INFO] Fold {fold_idx}: After archetype merge: {y_train_fold.value_counts().to_dict()}")
+            archetypes = find_minority_archetypes(
+                x_tr,
+                y_tr,
+                **(archetype_setting or {}),
+            )
+            x_tr, y_tr = merge_archetypes_with_minority(
+                x_tr,
+                y_tr,
+                archetypes,
+                random_state=seed,
+                **(minority_sample_setting or {}),
+            )
 
         trainer = ModelTrainer(
-            x_train_fold, y_train_fold, x_val_fold, y_val_fold,
-            random_state=random_state,
+            x_tr,
+            y_tr,
+            x_te,
+            y_te,
+            random_state=seed,
             categorical_indices=categorical_indices,
-            categorical_column_names=[x_train_fold.columns[i] for i in categorical_indices] if categorical_indices else [],
+            categorical_column_names=[
+                x_tr.columns[i] for i in categorical_indices
+            ]
+            if categorical_indices
+            else [],
             contains_categoricals=bool(categorical_indices),
-            encoded=(encoding_method != "ordinal" and encoding_method != "none")
+            encoded=(encoding_method == "onehot"),
         )
 
         report = trainer.train_and_evaluate(method=method)
-
         if report is None or report.empty:
-            print(f"[WARN] Fold {fold_idx} failed or returned empty report.")
+            print(f"[WARN] Fold {fold} returned empty report → skipped.")
             continue
+
+        report["fold"] = [fold] * len(report)
+        report["seed"] = [seed] * len(report)
+
+        weighted_row = report[report["class"] == "weighted avg"]
+        if not weighted_row.empty:
+            weighted_f1 = weighted_row["f1-score"].values[0]
+        else:
+            weighted_f1 = None
+        report["Weighted F1 Score"] = [weighted_f1] * len(report)
 
         fold_reports.append(report)
 
-    if not fold_reports:
-        print(f"[ERROR] All folds failed for method '{method}' on dataset '{target_column}'. Returning empty report.")
-        return pd.DataFrame()
+    return pd.concat(fold_reports, axis=0) if fold_reports else pd.DataFrame()
 
-    return aggregate_fold_reports(fold_reports)
 
-def aggregate_fold_reports(reports):
-    if not reports:
-        return pd.DataFrame()
-    aggregated = pd.concat(reports, axis=0)
-    return aggregated.groupby(aggregated.index).mean()
+def run_experiment(cfg):
+    all_datasets = load_selected_datasets(cfg)
 
-def run_experiment(config):
-    all_datasets = load_selected_datasets(config)
     jobs = []
+    for seed in cfg["random_states"]:  # one job block per seed
+        for dataset_name, ds in all_datasets.items():
+            dataset = ds["data"]
+            cat_idx = ds["categorical_indices"]
 
-    for dataset_name, dataset_entry in all_datasets.items():
-        jobs.append({
-            "dataset_name": dataset_name,
-            "dataset": dataset_entry["data"],
-            "categorical_indices": dataset_entry["categorical_indices"],
-            "encoding_method": "onehot",
-            "method": "baseline",
-            "imbalance_ratio": None,
-            "archetype_setting": None,
-            "minority_sample_setting": None,
-            "use_archetypes": False,
-            "seed": 0,
-            "n_folds": config.get("n_folds", 1),
-            "random_state": config.get("random_state", 42)
-        })
+            for method in cfg["methods"]:
+                valid_enc = (
+                    ["ordinal"]
+                    if method in {"rfoversample", "smotenc"}
+                    else cfg["encoding_methods"]
+                )
+                if method == "smotenc" and not cat_idx:
+                    continue
 
-    # Experimental jobs: apply methods, imbalance, and archetypes based on config
-    n_iterations = config.get("n_iterations", 1)
-    use_archetypes = config.get("use_archetypes", [True])
-    if not isinstance(use_archetypes, list):
-        use_archetypes = [use_archetypes]
+                for enc in valid_enc:
+                    for ratio in cfg["imbalance_ratios"]:
+                        for use_arch in cfg["use_archetypes"]:
+                            arch_iter = (
+                                cfg["archetype_settings"] if use_arch else [None]
+                            )
+                            min_iter = (
+                                cfg["minority_sample_settings"]
+                                if use_arch
+                                else [None]
+                            )
+                            for arch_set in arch_iter:
+                                for min_set in min_iter:
+                                    jobs.append(
+                                        dict(
+                                            dataset_name=dataset_name,
+                                            dataset=dataset,
+                                            categorical_indices=cat_idx,
+                                            encoding_method=enc,
+                                            method=method,
+                                            imbalance_ratio=ratio,
+                                            archetype_setting=arch_set,
+                                            minority_sample_setting=min_set,
+                                            use_archetypes=use_arch,
+                                            seed=seed,
+                                            n_folds=cfg["n_folds"],
+                                        )
+                                    )
 
-    for iteration in range(1, n_iterations + 1):
-        seed = iteration
-        for use_arch in use_archetypes:
-            for dataset_name, dataset_entry in all_datasets.items():
-                dataset = dataset_entry["data"]
-                cat_indices = dataset_entry["categorical_indices"]
+    def worker(j):
+        tgt_col = cfg.get("target_column") or j["dataset"].columns[0]
 
-                for method in config.get("methods", ["none"]):
-                    if method in ["rfoversample", "smotenc"]:
-                        valid_encodings = ["ordinal"]
-                    else:
-                        valid_encodings = config.get("encoding_methods", ["onehot"])
-
-                    if method == "smotenc" and not cat_indices:
-                        continue
-
-                    for enc in valid_encodings:
-                        if method != "archetypal" or use_arch:
-                            for ratio in config.get("imbalance_ratios", [0.1]):
-                                for arch_setting in config.get("archetype_settings", [{"archetype_proportion": 0.2}]):
-                                    for min_setting in config.get("minority_sample_settings", [{"sample_percentage": 0.5}]):
-                                        jobs.append({
-                                            "dataset_name": dataset_name,
-                                            "dataset": dataset,
-                                            "categorical_indices": cat_indices,
-                                            "encoding_method": enc,
-                                            "method": method,
-                                            "imbalance_ratio": ratio,
-                                            "archetype_setting": arch_setting,
-                                            "minority_sample_setting": min_setting,
-                                            "use_archetypes": use_arch,
-                                            "seed": seed,
-                                            "n_folds": config.get("n_folds", 1),
-                                            "random_state": config.get("random_state", 42)
-                                        })
-
-    def process_job(job_config):
-        target_column = config.get("target_column") or job_config["dataset"].columns[0]
         try:
-            cv_report = run_cross_validation(
-                dataset=job_config["dataset"],
-                target_column=target_column,
-                encoding_method=job_config["encoding_method"],
-                method=job_config["method"],
-                imbalance_ratio=job_config["imbalance_ratio"],
-                archetype_setting=job_config["archetype_setting"],
-                minority_sample_setting=job_config["minority_sample_setting"],
-                use_archetypes=job_config["use_archetypes"],
-                n_folds=job_config["n_folds"],
-                seed=job_config["seed"],
-                random_state=job_config["random_state"],
-                categorical_indices=job_config["categorical_indices"]
+            report = run_cross_validation(
+                dataset=j["dataset"],
+                target_column=tgt_col,
+                encoding_method=j["encoding_method"],
+                method=j["method"],
+                imbalance_ratio=j["imbalance_ratio"],
+                archetype_setting=j["archetype_setting"],
+                minority_sample_setting=j["minority_sample_setting"],
+                use_archetypes=j["use_archetypes"],
+                n_folds=j["n_folds"],
+                seed=j["seed"],
+                categorical_indices=j["categorical_indices"],
             )
 
-            if cv_report is None or cv_report.empty:
-                print(f"[WARN] No valid report returned for dataset '{job_config['dataset_name']}' and method '{job_config['method']}'.")
+            trimmed = {k: v for k, v in j.items() if k != "dataset"}
+            trimmed["classification_report"] = report
 
-            return {
-                "classification_report": cv_report,
-                "dataset": job_config["dataset_name"],
-                "encoding_method": job_config["encoding_method"],
-                "method": job_config["method"],
-                "imbalance_ratio": job_config["imbalance_ratio"],
-                "archetype_setting": job_config["archetype_setting"],
-                "minority_sample_setting": job_config["minority_sample_setting"],
-                "use_archetypes": job_config["use_archetypes"],
-                "iteration_seed": job_config["seed"]
-            }
+            return trimmed
+
         except Exception as e:
-            print(f"[ERROR] Job failed: {e}")
-            return {
-                "classification_report": None,
-                "dataset": job_config["dataset_name"],
-                "encoding_method": job_config["encoding_method"],
-                "method": job_config["method"],
-                "imbalance_ratio": job_config["imbalance_ratio"],
-                "archetype_setting": job_config["archetype_setting"],
-                "minority_sample_setting": job_config["minority_sample_setting"],
-                "use_archetypes": job_config["use_archetypes"],
-                "iteration_seed": job_config["seed"],
-                "error": str(e)
-            }
+            print(f"[ERROR] job failed → {e}")
+            trimmed = {k: v for k, v in j.items() if k != "dataset"}
+            trimmed.update({"classification_report": pd.DataFrame(), "error": str(e)})
+            return trimmed
 
-    results = Parallel(n_jobs=config.get("n_jobs", -1))(
-        delayed(process_job)(job) for job in jobs
+    raw_results = Parallel(n_jobs=cfg.get("n_jobs", -1))(
+        delayed(worker)(job) for job in jobs
     )
 
-    results_df = clean_results(results)
-    dump(results_df, config.get("results_file", "experiment_results.pkl"))
-    print(f"[INFO] Experiment results saved to {config.get('results_file', 'experiment_results.pkl')}")
+    results_df = clean_results(raw_results)
+    dump(results_df, cfg.get("results_file", "experiment_results.pkl"))
+    print(f"[INFO] Saved results to {cfg.get('results_file')}")
     return results_df

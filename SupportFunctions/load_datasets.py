@@ -31,11 +31,9 @@ categorical_cols = {
     'titanic': [0, 1, 3, 4, 6],
     'treeData': None,
     'waveform': None,
-    'wine': None,
-    'zoo': 'all'
+    'wine': None
 }
 
-# |---| Create pickled datasets
 def load_and_prepare_datasets(folder_path="datasets"):
     dataset_dict = {}
 
@@ -70,7 +68,6 @@ def load_and_prepare_datasets(folder_path="datasets"):
     print(f"\nTotal datasets loaded: {len(dataset_dict)}")
     return dataset_dict
 
-# |---| Load selected datasets from pickle
 def load_selected_datasets(config, pickle_path="prepared_datasets.pkl"):
 
     if not os.path.exists(pickle_path):
@@ -93,8 +90,6 @@ def load_selected_datasets(config, pickle_path="prepared_datasets.pkl"):
 
     return selected_data
 
-
-# |---| Entry point: generate pickle
 if __name__ == "__main__":
     output_path = "prepared_datasets.pkl"
     datasets = load_and_prepare_datasets()

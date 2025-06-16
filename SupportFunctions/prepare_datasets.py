@@ -1,5 +1,6 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder
 
 class DatasetPreprocessor:
     def __init__(self, dataset, target_column=None, test_size=0.3, random_state=42, 
@@ -41,10 +42,15 @@ class DatasetPreprocessor:
         else:
             self.cat_column_names = list(x.select_dtypes(include=["object", "category"]).columns)
 
-        effective_encoding = (
-            "ordinal" if self.method in ["rfoversample", "smotenc"]
-            else self.encoding_method
-        )
+        if self.method == "smotenc":
+            effective_encoding = "ordinal"
+        
+        elif self.method == "rfoversample":
+            effective_encoding = "onehot"
+        
+        else:
+            effective_encoding = self.encoding_method
+
 
         if effective_encoding == "ordinal":
             if self.cat_column_names:
@@ -52,7 +58,12 @@ class DatasetPreprocessor:
             self.label_encoded_x = x.copy()
 
         elif effective_encoding == "onehot":
-            x = pd.get_dummies(x, columns=self.cat_column_names, drop_first=True)
+            encoder = OneHotEncoder(drop='first', sparse_output=False, handle_unknown='ignore')
+            x_encoded = encoder.fit_transform(x[self.cat_column_names])
+            encoded_df = pd.DataFrame(x_encoded, columns=encoder.get_feature_names_out(self.cat_column_names), index=x.index)
+
+            x = x.drop(columns=self.cat_column_names)
+            x = pd.concat([x, encoded_df], axis=1)
 
         else:
             raise ValueError(f"Invalid encoding method '{self.encoding_method}'. Choose 'ordinal' or 'onehot'.")
@@ -60,3 +71,4 @@ class DatasetPreprocessor:
         self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(
             x, y, test_size=self.test_size, random_state=self.random_state
         )
+

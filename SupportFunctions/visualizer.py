@@ -18,9 +18,11 @@ def process_plot(save_fig=False, output_dir='graphs', filename='plot.png'):
 def extract_f1_score(report_df):
     if not isinstance(report_df, pd.DataFrame):
         return np.nan
-    if "weighted avg" not in report_df.index:
-        return np.nan
-    return report_df.loc["weighted avg", "f1-score"]
+    if "class" in report_df.columns:
+        row = report_df[report_df["class"] == "weighted avg"]
+        if not row.empty and "f1-score" in row.columns:
+            return row["f1-score"].values[0]
+    return np.nan
 
 def clean_results(results):
     valid_results = [res for res in results if "classification_report" in res]
@@ -29,13 +31,15 @@ def clean_results(results):
     results_df["Weighted F1 Score"] = results_df["classification_report"].apply(extract_f1_score)
 
     results_df.rename(columns={
-        "dataset": "Dataset",
+        "dataset_name": "Dataset",
         "method": "Method",
         "imbalance_ratio": "Imbalance Ratio",
         "encoding_method": "Encoding Method",
         "archetype_setting": "Archetype Setting",
         "minority_sample_setting": "Minority Sample Setting",
-        "use_archetypes": "Use Archetypes"
+        "use_archetypes": "Use Archetypes",
+        "seed": "Seed",
+        "fold": "Fold",
     }, inplace=True)
 
     # Convert settings to string for grouping
@@ -52,6 +56,8 @@ def clean_results(results):
     results_df["Imbalance Ratio"] = results_df["Imbalance Ratio"].fillna("None")
 
     return results_df
+
+
 
 def annotate_bars(ax):
     for container in ax.containers:

@@ -157,9 +157,14 @@ class RFOversampler:
                     new_combined_x = pd.DataFrame(new_points_num, columns=x_numerical.columns)
                 x = pd.concat((old_combined_x, 
                             new_combined_x), axis=0).reset_index(drop=True)
-                x = x[self.cols] #reorder columns to match original dataframe
                 y = pd.concat((y, 
                             pd.Series(np.ones_like(new_points_num[:, 0]) * label, 
                                         dtype=int))).reset_index(drop=True)
+
+        missing_cols = set(self.cols) - set(x.columns)
+        for col in missing_cols:
+            x[col] = 0
+
+        x = x[self.cols]
 
         return x, y
