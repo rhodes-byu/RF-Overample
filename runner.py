@@ -9,10 +9,10 @@ if __name__ == "__main__":
 
     config = {
         # Datasets and Methods
-        "selected_datasets": ["titanic", "sonar", "diabetes", "heart_disease", "heart_failure", "ionosphere", "parkinsons"],
-        "methods": ['none', "smote", "class_weights", "adasyn", "random_undersampling", "rfoversample", "baseline"], #none, class_weights, adasyn, random_undersampling, rfoversample, smotenc
+        "selected_datasets": "all",
+        "methods": ['rfoversample'], #none, class_weights, adasyn, random_undersampling, rfoversample, smotenc
         "encoding_methods": ["ordinal"],
-        "imbalance_ratios": [0.15, 0.2, 0.25, 0.3, 0.35],
+        "imbalance_ratios": [0.15, 0.2, 0.25],
 
         # Archetypes
         "use_archetypes": [True, False],
