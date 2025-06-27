@@ -35,29 +35,24 @@ def clean_results(results):
         "method": "Method",
         "imbalance_ratio": "Imbalance Ratio",
         "encoding_method": "Encoding Method",
-        "archetype_setting": "Archetype Setting",
-        "minority_sample_setting": "Minority Sample Setting",
+        "archetype_proportion": "Archetype Proportion",
+        "reintroduced_minority": "Reintroduced Minority",
         "use_archetypes": "Use Archetypes",
         "seed": "Seed",
         "fold": "Fold",
     }, inplace=True)
 
     # Convert settings to string for grouping
-    if "Minority Sample Setting" in results_df.columns:
-        results_df["Minority Sample Setting"] = results_df["Minority Sample Setting"].astype(str)
-    if "Archetype Setting" in results_df.columns:
-        results_df["Archetype Setting"] = results_df["Archetype Setting"].astype(str)
-
-    for col in ["Archetype Setting", "Minority Sample Setting"]:
-        if col not in results_df.columns:
+    for col in ["Archetype Proportion", "Reintroduced Minority"]:
+        if col in results_df.columns:
+            results_df[col] = results_df[col].astype(str)
+        else:
             results_df[col] = "N/A"
 
     # Fix baseline for grouping
     results_df["Imbalance Ratio"] = results_df["Imbalance Ratio"].fillna("None")
 
     return results_df
-
-
 
 def annotate_bars(ax):
     for container in ax.containers:

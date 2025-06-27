@@ -37,7 +37,8 @@ def merge_archetypes_with_minority(X_train, y_train, archetypes,
                                    sample_percentage=None, sample_number=0, 
                                    random_state=42):
     """
-    Combines archetypes with a sample of original minority instances.
+    Combines archetypes with a sample of the original minority class,
+    and merges the result with all other classes.
 
     Args:
         X_train (pd.DataFrame): Training features (imbalanced).
@@ -51,13 +52,13 @@ def merge_archetypes_with_minority(X_train, y_train, archetypes,
         Tuple[pd.DataFrame, pd.Series]: New training features and labels.
     """
     minority_class = y_train.value_counts().idxmin()
-    majority_class = y_train.value_counts().idxmax()
 
-    X_minority = X_train[y_train == minority_class]
-    X_majority = X_train[y_train == majority_class]
-    y_majority = y_train[y_train == majority_class]
+    # Keep all classes that are not the minority
+    X_non_minority = X_train[y_train != minority_class]
+    y_non_minority = y_train[y_train != minority_class]
 
     # Sample from original minority class
+    X_minority = X_train[y_train == minority_class]
     if sample_percentage and sample_percentage > 0:
         X_sampled = X_minority.sample(frac=sample_percentage, random_state=random_state)
     elif sample_number > 0:
@@ -69,9 +70,9 @@ def merge_archetypes_with_minority(X_train, y_train, archetypes,
     X_new_minority = pd.concat([X_sampled, archetypes], ignore_index=True)
     y_new_minority = pd.Series([minority_class] * len(X_new_minority), name=y_train.name)
 
-    # Merge with majority data
-    X_new_train = pd.concat([X_majority, X_new_minority], ignore_index=True)
-    y_new_train = pd.concat([y_majority, y_new_minority], ignore_index=True)
+    # Merge with all other non-minority class data
+    X_new_train = pd.concat([X_non_minority, X_new_minority], ignore_index=True)
+    y_new_train = pd.concat([y_non_minority, y_new_minority], ignore_index=True)
 
     # Shuffle combined dataset
     combined = pd.concat([X_new_train, y_new_train], axis=1).sample(

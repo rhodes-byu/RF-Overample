@@ -9,22 +9,22 @@ if __name__ == "__main__":
 
     config = {
         # Datasets and Methods
-        "selected_datasets": "all",
-        "methods": ['rfoversample'], #none, class_weights, adasyn, random_undersampling, rfoversample, smotenc
+        "selected_datasets": ["titanic"],
+        "methods": ['smote'],  # none, class_weights, adasyn, random_undersampling, rfoversample, smotenc
         "encoding_methods": ["ordinal"],
         "imbalance_ratios": [0.15, 0.2, 0.25],
 
-        # Archetypes
+        # Archetype Parameters
         "use_archetypes": [True, False],
-        "archetype_settings": [{"archetype_proportion": 0.2}],
-        "minority_sample_settings":[{"sample_percentage": 0.5}],
+        "archetype_proportions": [0.1, 0.2, 0.3],
+        "reintroduced_minority": [0.1, 0.3, 0.5, 0.7, 0.9],
 
-        # Cross-validation using pre-generated seeds
+        # Cross-validation
         "random_states": random_seeds,
-        "n_folds": 5,
+        "n_folds": 3,
         "n_jobs": -1,
 
-        # Save Results
+        # Results
         "results_file": "experiment_results.pkl"
     }
 
