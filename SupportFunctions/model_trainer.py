@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import traceback
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, f1_score
 from sklearn.preprocessing import LabelEncoder
@@ -73,6 +74,7 @@ class ModelTrainer:
                     self.x_train, self.y_train = resampler.apply_smotenc()
             except Exception as e:
                 print(f"[ERROR] Resampling failed for method: {method} → {e}")
+                # traceback.print_exc()
                 return pd.DataFrame()
 
             if len(self.y_train.unique()) < 2:
