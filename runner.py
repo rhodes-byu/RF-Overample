@@ -9,6 +9,7 @@ if __name__ == "__main__":
 
     config = {
         # Datasets and Methods
+<<<<<<< HEAD
         "selected_datasets": ["titanic"],
         "methods": ['smote'],  # none, class_weights, adasyn, random_undersampling, rfoversample, smotenc
         "encoding_methods": ["ordinal"],
@@ -18,6 +19,17 @@ if __name__ == "__main__":
         "use_archetypes": [True, False],
         "archetype_proportions": [0.1, 0.2, 0.3],
         "reintroduced_minority": [0.1, 0.3, 0.5, 0.7, 0.9],
+=======
+        "selected_datasets": ['crx'],
+        "methods": ['rfoversample'], #none, class_weights, adasyn, random_undersampling, rfoversample, smotenc
+        "encoding_methods": ["ordinal"],
+        "imbalance_ratios": [0.15, 0.2, 0.25],
+
+        # Archetypes
+        "use_archetypes": [False, False],
+        "archetype_settings": [{"archetype_proportion": 0.2}],
+        "minority_sample_settings":[{"sample_percentage": 0.5}],
+>>>>>>> 0dd340e3cd2800e2454f571b7e849081c2bf7c14
 
         # Cross-validation
         "random_states": random_seeds,

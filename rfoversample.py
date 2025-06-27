@@ -136,6 +136,11 @@ class RFOversampler:
                                         new_points_cat[i, j + start_x_slice_ind] = 1
                                 else:
                                         new_points_cat[i, j + start_x_slice_ind] = 0
+                            # ✅ Add this right after the inner loop finishes
+                            encoded_row = new_points_cat[i, start_x_slice_ind:end_x_slice_ind]
+                            if encoded_row.sum() > 1:
+                                raise ValueError(f"Multi-assignment detected for {categorical_feature} in synthetic row {i}. Values: {encoded_row}")
+
                             start_x_slice_ind = end_x_slice_ind #update starting index for slicing
 
                 if self.contains_categoricals:
