@@ -1,0 +1,232 @@
+---
+title: "AAtesting"
+format: html
+editor: visual
+---
+
+Necessary Imports
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(readr)
+```
+
+Read in Data
+
+```{r}
+data <- read_csv("AAtestingdata.csv")
+
+data2 <- read_csv("AAtestingdata2.csv")
+```
+
+Clean out Unwanted Columns
+
+```{r}
+data <- data |>
+  select(-categorical_indices, 
+         -`Encoding Method`, 
+         -n_folds, 
+         -classification_report) |>
+  filter(!is.na(`Weighted F1 Score`))
+```
+
+Create Datasets of Interest
+
+```{r}
+
+baselinedata <- data |>
+  filter(
+    Method == "baseline",
+    `Use Archetypes` == FALSE,
+    `Imbalance Ratio` == 0.15
+  )
+
+baselinedata <- baselinedata |>
+  select(-`Imbalance Ratio`, 
+         -`Archetype Proportion`, 
+         -`Reintroduced Minority`, 
+         -`Use Archetypes`
+         )
+
+archetypedata <- data |> 
+  filter(
+    Method == "smote",
+    `Use Archetypes` == TRUE,
+  )
+```
+
+## Archetype Proportion Testing
+
+```{r}
+
+ggplot(archetypedata, aes(x = `Archetype Proportion`, y = `Weighted F1 Score`)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm", color = "blue") +
+  labs(
+    title = "Impact of Archetype Proportion on F1 Score by Dataset",
+    x = "Archetype Proportion",
+    y = "Weighted F1 Score"
+  )
+
+```
+
+```{r}
+model <- lm(`Weighted F1 Score` ~ `Archetype Proportion`, data = archetypedata)
+summary(model)
+```
+
+Allow for splitting based upon whether the data is categorical or not, and whether or not the data set is multi-nomial classification.
+
+```{r}
+
+dataset_info <- data.frame(
+  Dataset = c("artificial_tree", "audiology", "balance_scale", "breast_cancer", "car", "chess", "crx", "diabetes", 
+              "ecoli_5", "flare1", "glass", "heart_disease", "heart_failure", "hepatitis", "hill_valley", "ionosphere", 
+              "iris", "lymphography", "mnist_test", "optdigits", "parkinsons", "seeds", "segmentation", "sonar", 
+              "tic-tac-toe", "titanic", "treeData", "waveform", "wine", "zoo"),
+  Has_Categorical = c(FALSE, TRUE, TRUE, TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, TRUE, FALSE, TRUE, TRUE, TRUE,
+                      FALSE, TRUE, FALSE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, TRUE, FALSE, FALSE, FALSE, TRUE),
+  Is_Multiclass = c(TRUE, TRUE, TRUE, FALSE, TRUE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE, 
+                    FALSE, FALSE, TRUE, TRUE, TRUE, TRUE, FALSE, TRUE, TRUE, FALSE, FALSE, FALSE, TRUE, TRUE, TRUE, TRUE)
+)
+
+archetypedatasplit <- inner_join(archetypedata, dataset_info, by = "Dataset")
+```
+
+```{r}
+subset_1 <- archetypedatasplit |> filter(Is_Multiclass == TRUE, Has_Categorical == TRUE)
+subset_2 <- archetypedatasplit |> filter(Is_Multiclass == TRUE, Has_Categorical == FALSE)
+subset_3 <- archetypedatasplit |> filter(Is_Multiclass == FALSE, Has_Categorical == TRUE)
+subset_4 <- archetypedatasplit |> filter(Is_Multiclass == FALSE, Has_Categorical == FALSE)
+
+model_1 <- lm(`Weighted F1 Score` ~ `Archetype Proportion`, data = subset_1)
+model_2 <- lm(`Weighted F1 Score` ~ `Archetype Proportion`, data = subset_2)
+model_3 <- lm(`Weighted F1 Score` ~ `Archetype Proportion`, data = subset_3)
+model_4 <- lm(`Weighted F1 Score` ~ `Archetype Proportion`, data = subset_4)
+
+cat("\n--- Multiclass + Categorical ---\n")
+summary(model_1)
+
+cat("\n--- Multiclass + No Categorical ---\n")
+summary(model_2)
+
+cat("\n--- Binary + Categorical ---\n")
+summary(model_3)
+
+cat("\n--- Binary + No Categorical ---\n")
+summary(model_4)
+
+```
+
+```{r}
+archetypeinteractions <- lm(`Weighted F1 Score` ~ `Archetype Proportion` * Is_Multiclass * Has_Categorical, data = archetypedatasplit)
+summary(archetypeinteractions)
+```
+
+Across our results we can conclude that Archetype Proportion doesn't have a significant impact on Weighted F1 Score given Archetypes are used. We used runner,py to generate results across all data sets and various Archetype Proportions and Reintroduced Minority.
+
+## Reintroduced Minority Testing
+
+```{r}
+
+model <- lm(
+  `Weighted F1 Score` ~ `Reintroduced Minority` * Is_Multiclass * Has_Categorical,
+  data = archetypedatasplit
+)
+
+summary(model)
+
+```
+
+Reintroducing more minority examples helps performance, especially in categorical datasets, but that benefit drops sharply when the data is also multiclass — possibly due to oversampling creating confusion in multi-class setups with sparse categorical features.
+
+```{r}
+archetypedata2 <- data |> 
+  filter(
+    Method == "smote",
+  )
+archetypedata2 <- inner_join(archetypedata2, dataset_info, by = "Dataset")
+```
+
+```{r}
+model <- lm(`Weighted F1 Score` ~ `Use Archetypes`, data = archetypedata2)
+summary(model)
+```
+
+Adjusted R-squared is minimal, but p-value is significant that Use Archetypes seems to lower F1 score on average by about 0.028 points.
+
+### Testing for Data set types.
+
+```{r}
+sub_mc_cat    <- filter(archetypedata2, Is_Multiclass == TRUE,  Has_Categorical == TRUE)
+sub_mc_nocat  <- filter(archetypedata2, Is_Multiclass == TRUE,  Has_Categorical == FALSE)
+sub_bin_cat   <- filter(archetypedata2, Is_Multiclass == FALSE, Has_Categorical == TRUE)
+sub_bin_nocat <- filter(archetypedata2, Is_Multiclass == FALSE, Has_Categorical == FALSE)
+
+model_mc_cat    <- lm(`Weighted F1 Score` ~ `Use Archetypes`, data = sub_mc_cat)
+model_mc_nocat  <- lm(`Weighted F1 Score` ~ `Use Archetypes`, data = sub_mc_nocat)
+model_bin_cat   <- lm(`Weighted F1 Score` ~ `Use Archetypes`, data = sub_bin_cat)
+model_bin_nocat <- lm(`Weighted F1 Score` ~ `Use Archetypes`, data = sub_bin_nocat)
+
+cat("\n--- Multiclass + Categorical ---\n")
+summary(model_mc_cat)
+
+cat("\n--- Multiclass + No Categorical ---\n")
+summary(model_mc_nocat)
+
+cat("\n--- Binary + Categorical ---\n")
+summary(model_bin_cat)
+
+cat("\n--- Binary + No Categorical ---\n")
+summary(model_bin_nocat)
+```
+
+Even after filtering by data set type, Archetypes still don't seem to improve performance as opposed to non-archetypal smote, and although relatively small (-0.0615), significantly decreasing performance in binary classifications tasks where categorical variables are present.
+
+## Testing for Veracity of Results with Reintroduced Minority
+
+```{r}
+archetypedata3 <- archetypedata2 |>
+  filter(`Reintroduced Minority` == 0.7 | is.na(`Reintroduced Minority`))
+```
+
+```{r}
+model <- lm(`Weighted F1 Score` ~ `Use Archetypes`, data = archetypedata3)
+summary(model)
+```
+
+```{r}
+sub_mc_cat    <- filter(archetypedata3, Is_Multiclass == TRUE,  Has_Categorical == TRUE)
+sub_mc_nocat  <- filter(archetypedata3, Is_Multiclass == TRUE,  Has_Categorical == FALSE)
+sub_bin_cat   <- filter(archetypedata3, Is_Multiclass == FALSE, Has_Categorical == TRUE)
+sub_bin_nocat <- filter(archetypedata3, Is_Multiclass == FALSE, Has_Categorical == FALSE)
+
+model_mc_cat    <- lm(`Weighted F1 Score` ~ `Use Archetypes`, data = sub_mc_cat)
+model_mc_nocat  <- lm(`Weighted F1 Score` ~ `Use Archetypes`, data = sub_mc_nocat)
+model_bin_cat   <- lm(`Weighted F1 Score` ~ `Use Archetypes`, data = sub_bin_cat)
+model_bin_nocat <- lm(`Weighted F1 Score` ~ `Use Archetypes`, data = sub_bin_nocat)
+
+cat("\n--- Multiclass + Categorical ---\n")
+summary(model_mc_cat)
+
+cat("\n--- Multiclass + No Categorical ---\n")
+summary(model_mc_nocat)
+
+cat("\n--- Binary + Categorical ---\n")
+summary(model_bin_cat)
+
+cat("\n--- Binary + No Categorical ---\n")
+summary(model_bin_nocat)
+```
+
+```{r}
+model <- lm(`Weighted F1 Score` ~ `Use Archetypes` * Dataset, data = archetypedata3)
+summary(model)
+```
+
+Even after adjusting for the effect of Minority Reintroduction, the implementation of Archetypes doesn't seem to show significant beneficial effect in an data set type.
+
+```{r}
+
+```

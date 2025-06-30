@@ -10,14 +10,14 @@ if __name__ == "__main__":
     config = {
         # Datasets and Methods
         "selected_datasets": "all",
-        "methods": ['smote', 'baseline'],  # none, class_weights, adasyn, random_undersampling, rfoversample, smotenc
+        "methods": ['smote'],  # none, class_weights, adasyn, random_undersampling, rfoversample, smotenc
         "encoding_methods": ["ordinal"],
-        "imbalance_ratios": [0.15, 0.2, 0.25],
+        "imbalance_ratios": [0.2],
 
         # Archetype Parameters
         "use_archetypes": [True, False],
-        "archetype_proportions": [0.2, 0.35, 0.5],
-        "reintroduced_minority": [0.3, 0.5, 0.7],
+        "archetype_proportions": [0.3],
+        "reintroduced_minority": [1.0],
 
         # Cross-validation
         "random_states": random_seeds,
