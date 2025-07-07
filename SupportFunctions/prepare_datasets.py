@@ -71,4 +71,3 @@ class DatasetPreprocessor:
         self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(
             x, y, test_size=self.test_size, random_state=self.random_state
         )
-

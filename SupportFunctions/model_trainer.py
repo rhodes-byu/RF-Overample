@@ -11,8 +11,6 @@ import sys
 sys.path.append("../")
 from rfoversample import RFOversampler
 
-
-
 class ModelTrainer:
     def __init__(self, x_train, y_train, x_test, y_test,
                  random_state=42,

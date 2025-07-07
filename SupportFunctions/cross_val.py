@@ -11,7 +11,6 @@ from SupportFunctions.load_datasets import load_selected_datasets
 from SupportFunctions.apply_AA import find_minority_archetypes, merge_archetypes_with_minority
 from SupportFunctions.visualizer import clean_results
 
-
 def run_cross_validation(
     dataset,
     target_column,
@@ -104,7 +103,6 @@ def run_cross_validation(
         fold_reports.append(report)
 
     return pd.concat(fold_reports, axis=0) if fold_reports else pd.DataFrame()
-
 
 def run_experiment(cfg):
     all_datasets = load_selected_datasets(cfg)
