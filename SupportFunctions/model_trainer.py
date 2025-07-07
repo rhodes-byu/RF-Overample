@@ -107,6 +107,8 @@ class ModelTrainer:
 
         except Exception as e:
             print(f"[ERROR] Evaluation failed for method: {method} → {e}")
+            traceback.print_exc()
+
             return pd.DataFrame()
 
 

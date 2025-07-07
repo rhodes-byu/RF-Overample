@@ -9,20 +9,20 @@ if __name__ == "__main__":
 
     config = {
         # Datasets and Methods
-        "selected_datasets": "all",
-        "methods": ['smote'],  # none, class_weights, adasyn, random_undersampling, rfoversample, smotenc
-        "encoding_methods": ["ordinal"],
+        "selected_datasets": 'all',
+        "methods": ['rfoversample', 'smote'],  # none, class_weights, adasyn, random_undersampling, rfoversample, smotenc
+        "encoding_methods": ["onehot"],
         "imbalance_ratios": [0.2],
 
         # Archetype Parameters
-        "use_archetypes": [True, False],
+        "use_archetypes": [False, False],
         "archetype_proportions": [0.3],
         "reintroduced_minority": [1.0],
 
         # Cross-validation
         "random_states": random_seeds,
         "n_folds": 3,
-        "n_jobs": -1,
+        "n_jobs": 1,
 
         # Results
         "results_file": "experiment_results.pkl"
