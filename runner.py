@@ -9,10 +9,10 @@ if __name__ == "__main__":
 
     config = {
         # Datasets and Methods
-        "selected_datasets": 'all',
+        "selected_datasets": ['titanic'],
         "methods": ['rfoversample', 'smote'],  # none, class_weights, adasyn, random_undersampling, rfoversample, smotenc
         "encoding_methods": ["onehot"],
-        "imbalance_ratios": [0.2],
+        "imbalance_ratios": [0.1],
 
         # Archetype Parameters
         "use_archetypes": [False, False],
@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
         # Cross-validation
         "random_states": random_seeds,
-        "n_folds": 3,
+        "n_folds": 2,
         "n_jobs": 1,
 
         # Results
