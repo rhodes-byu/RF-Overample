@@ -14,7 +14,7 @@ from rfgap import RFGAP
 from SupportFunctions.imbalancer import ImbalanceHandler
 
 # Customized Parameters
-dataset_name = "sonar"
+dataset_name = "titanic"
 imbalance_ratio = 0.1
 n_outliers = 10
 xlim = (-5, 5)
