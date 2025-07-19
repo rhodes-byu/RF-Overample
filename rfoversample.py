@@ -147,25 +147,19 @@ class RFOversampler:
                                                     new_points_cat_non_dummy), axis=1)
 
                         old_points_cat_non_dummy = pd.from_dummies(x_categorical, sep='_')
-                        old_combined_x = pd.concat((x_numerical, old_points_cat_non_dummy), axis=1)
+                        old_combined_x = pd.concat((x, old_points_cat_non_dummy), axis=1)
                     else:
                         new_combined_x = pd.concat((pd.DataFrame(new_points_num, columns=x_numerical.columns), 
                                                     pd.DataFrame(new_points_cat, columns=x_categorical.columns)), axis=1)
                         old_combined_x = pd.concat((x_numerical, 
                                                     x_categorical), axis=1)
                 else:
-                    old_combined_x = x_numerical
+                    old_combined_x = x
                     new_combined_x = pd.DataFrame(new_points_num, columns=x_numerical.columns)
                 x = pd.concat((old_combined_x, 
                             new_combined_x), axis=0).reset_index(drop=True)
                 y = pd.concat((y, 
                             pd.Series(np.ones_like(new_points_num[:, 0]) * label, 
                                         dtype=int))).reset_index(drop=True)
-
-        missing_cols = set(self.cols) - set(x.columns)
-        for col in missing_cols:
-            x[col] = 0
-
-        x = x[self.cols]
 
         return x, y
