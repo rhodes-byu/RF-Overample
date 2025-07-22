@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.utils import check_random_state, resample
 
 class ImbalanceHandler:
-    def __init__(self, x_train, y_train, imbalance_ratio=0.2, batch_size=100, random_state=42, min_minority_samples=20):
+    def __init__(self, x_train, y_train, imbalance_ratio=0.2, batch_size=300, random_state=42, min_minority_samples=20):
         """
         Handles creation of an imbalanced dataset by resampling with replacement.
 
