@@ -73,7 +73,7 @@ class RFOversampler:
             x = self.Data.drop(self.Data.columns[self.target_ind], axis=1)
 
         #Train RF, get proximities
-        rf = RFGAP(y = y, prediction_type = 'classification', matrix_type = 'dense')
+        rf = RFGAP(y = y, class_weight='balanced', prediction_type = 'classification', matrix_type = 'dense')
         rf.fit(x, y)
         prox = rf.get_proximities()
 
