@@ -99,6 +99,7 @@ class RFOversampler:
         cat_features_size = x_categorical.shape[1] if self.contains_categoricals else 0
 
         #Loop through all classes that aren't majority class and upsample
+        #Loop through all classes that aren't majority class and upsample
         for label in class_counts:
             if label != maj_label:
 
@@ -116,31 +117,30 @@ class RFOversampler:
                     samples = np.random.choice(sample_indices, self.num_samples, replace=True)
 
                     #Get new numerical features and add to new points array
-                    new_features_num = np.sum((x_numerical.T.iloc[:, samples] @ prox[samples, :]), axis=1)/self.num_samples #proximity weighted average of the samples
+                    new_features_num = np.sum((x_numerical.T.iloc[:, samples] @ prox[samples, :]), axis=1)/self.num_samples
                     new_points_num[i, : ] = new_features_num
 
                     if self.contains_categoricals:
                         #Get new categorical features and add to new points array
-                        start_x_slice_ind = 0 #variable to help in slicing categorical columns to focus on one encoded categorical feature at a time
-                        for categorical_feature in cat_dict: #loop through the features in the encoded x_categorical columns
+                        start_x_slice_ind = 0
+                        for categorical_feature in cat_dict:
 
-                            numof_values_in_feature = cat_dict[categorical_feature] #number of columns in x_categorical dedicated to specified encoded feature - used in slicing
+                            numof_values_in_feature = cat_dict[categorical_feature]
                             end_x_slice_ind = numof_values_in_feature + start_x_slice_ind
-                            this_encoded_feature = x_categorical.iloc[:, start_x_slice_ind:end_x_slice_ind] #slice to focus on the encoded columns of a feature, one feature at a time
+                            this_encoded_feature = x_categorical.iloc[:, start_x_slice_ind:end_x_slice_ind]
 
-                            new_feature_cat_ind = np.sum((this_encoded_feature.T.iloc[:, samples] @ prox[samples, :]).T, axis=0).argmax(axis=0) #proximity weighted 'best guess' of the samples
+                            new_feature_cat_ind = np.sum((this_encoded_feature.T.iloc[:, samples] @ prox[samples, :]).T, axis=0).argmax(axis=0)
 
-                            #loop through the columns of the encoded feature and set the column with the highest proximity to 1 and the rest to 0
-                            for j in range(numof_values_in_feature): 
+                            for j in range(numof_values_in_feature):
                                 if j == new_feature_cat_ind:
-                                        new_points_cat[i, j + start_x_slice_ind] = 1
+                                    new_points_cat[i, j + start_x_slice_ind] = 1
                                 else:
-                                        new_points_cat[i, j + start_x_slice_ind] = 0
+                                    new_points_cat[i, j + start_x_slice_ind] = 0
 
-                            start_x_slice_ind = end_x_slice_ind #update starting index for slicing
+                            start_x_slice_ind = end_x_slice_ind
 
+                # After generating new points for this label, concatenate to original data:
                 if self.contains_categoricals:
-                    #concatenate the new numerical and categorical features to the original data
                     if not self.encoded:
                         new_points_cat_non_dummy = pd.from_dummies(pd.DataFrame(new_points_cat, columns=x_categorical.columns), sep='_')
                         new_combined_x = pd.concat((pd.DataFrame(new_points_num, columns=x_numerical.columns), 
@@ -151,15 +151,17 @@ class RFOversampler:
                     else:
                         new_combined_x = pd.concat((pd.DataFrame(new_points_num, columns=x_numerical.columns), 
                                                     pd.DataFrame(new_points_cat, columns=x_categorical.columns)), axis=1)
-                        old_combined_x = pd.concat((x_numerical, 
-                                                    x_categorical), axis=1)
+                        old_combined_x = pd.concat((x_numerical, x_categorical), axis=1)
                 else:
-                    old_combined_x = x
                     new_combined_x = pd.DataFrame(new_points_num, columns=x_numerical.columns)
-                x = pd.concat((old_combined_x, 
-                            new_combined_x), axis=0).reset_index(drop=True)
-                y = pd.concat((y, 
-                            pd.Series(np.ones_like(new_points_num[:, 0]) * label, 
-                                        dtype=int))).reset_index(drop=True)
+                    old_combined_x = x
+
+                x = pd.concat((old_combined_x, new_combined_x), axis=0).reset_index(drop=True)
+
+                label_int = int(label)
+                y = pd.concat((
+                    y,
+                    pd.Series(np.ones_like(new_points_num[:, 0]) * label_int, dtype=int)
+                )).reset_index(drop=True)
 
         return x, y
