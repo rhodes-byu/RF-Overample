@@ -232,7 +232,7 @@ def run_all_experiments(datasets, seeds, imbalance_ratios, ratio_smotes, n_synth
 if __name__ == "__main__":
     datasets = [
 
-    "sonar", "chess", "diabetes"
+    "diabetes"
 
     ]
     # "treeData", "waveform", "wine" "artificial_tree", "audiology", "balance_scale", "breast_cancer", "car", 
