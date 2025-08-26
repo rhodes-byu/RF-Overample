@@ -6,7 +6,7 @@ categorical_cols = {
     'artificial_tree': None,
     'audiology': 'all',
     'balance_scale': 'all',
-    'breast_cancer': 'all',
+    'breast_cancer': None,
     'car': 'all',
     'chess': 'all',
     'crx': [0, 2, 3, 4, 5, 7, 8, 10, 11],
@@ -28,7 +28,7 @@ categorical_cols = {
     'segmentation': None,
     'sonar': None,
     'tic-tac-toe': 'all',
-    'titanic': [0, 1, 3, 4, 6],
+    'titanic': [0, 1, 6],
     'treeData': None,
     'waveform': None,
     'wine': None

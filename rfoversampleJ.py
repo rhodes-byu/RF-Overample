@@ -21,6 +21,7 @@ class RFOversampler:
         enforce_domains=True,
         binary_strategy="bernoulli",
         hybrid_perturb_frac=0.0,
+        boundary_strategy="majority",  # "majority" or "nearest"
     ):
         self.Data = pd.concat([y_train, x_train], axis=1)
         self.target_ind = 0
@@ -38,9 +39,15 @@ class RFOversampler:
         self.binary_strategy = str(binary_strategy)
         self.hybrid_perturb_frac = float(hybrid_perturb_frac)
 
+        # new: boundary strategy
+        bs = str(boundary_strategy).lower()
+        if bs not in {"majority", "nearest"}:
+            raise ValueError("boundary_strategy must be 'majority' or 'nearest'")
+        self.boundary_strategy = bs
+
         self._rng = np.random.default_rng(random_state)
 
-    # helper methods
+    # Helper Functions
     @staticmethod
     def _normalize_weights(w: np.ndarray) -> np.ndarray:
         s = float(np.sum(w))
@@ -66,23 +73,24 @@ class RFOversampler:
                 out[base] = levels
             return pd.DataFrame(out, index=df.index)
 
+    @staticmethod
+    def _avg_proximity_to_class(prox: np.ndarray, rows: np.ndarray, cols: np.ndarray) -> np.ndarray:
+        """Average proximity from each index in `rows` to all indices in `cols`."""
+        if cols is None or len(cols) == 0 or rows is None or len(rows) == 0:
+            return np.zeros(len(rows), dtype=float)
+        return prox[np.ix_(rows, cols)].mean(axis=1)
+
     def _split_numeric_categorical(self, x: pd.DataFrame, cat_dict: dict) -> tuple:
-        """Return (x_num, x_cat, encoded_num_cols, encoded_cat_cols).
-        Works for both encoded=False (after get_dummies) and encoded=True.
-        """
+        """Return (x_num, x_cat, encoded_num_cols, encoded_cat_cols)."""
         if not self.contains_categoricals or not cat_dict:
             return x, None, x.columns.tolist(), []
-
-        # Collect one-hot columns for each categorical by name prefix
         encoded_cat_cols = []
         for cat_name, _n_levels in cat_dict.items():
             pref = f"{cat_name}_"
             cols = [c for c in x.columns if c.startswith(pref)]
-            # if levels weren't found with exact prefix, fall back to any startswith cat_name
             if not cols:
                 cols = [c for c in x.columns if c.startswith(cat_name)]
             encoded_cat_cols.extend(cols)
-
         encoded_num_cols = [c for c in x.columns if c not in encoded_cat_cols]
         x_numerical = x[encoded_num_cols]
         x_categorical = x[encoded_cat_cols] if encoded_cat_cols else None
@@ -93,26 +101,17 @@ class RFOversampler:
         cat_dict = {}
         if not self.contains_categoricals:
             return cat_dict
-        if not self.encoded:
-            # we had original names in self.cat_cols
-            for base in self.cat_cols:
-                n = sum(1 for c in x.columns if c.startswith(f"{base}_"))
-                if n == 0:
-                    n = sum(1 for c in x.columns if c.startswith(base))
-                if n > 0:
-                    cat_dict[base] = n
-        else:
-            # encoded=True: base names already provided, count columns
-            for base in self.cat_cols:
-                n = sum(1 for c in x.columns if c.startswith(f"{base}_"))
-                if n == 0:
-                    n = sum(1 for c in x.columns if c.startswith(base))
-                if n > 0:
-                    cat_dict[base] = n
+        bases = self.cat_cols or []
+        for base in bases:
+            n = sum(1 for c in x.columns if c.startswith(f"{base}_"))
+            if n == 0:
+                n = sum(1 for c in x.columns if c.startswith(base))
+            if n > 0:
+                cat_dict[base] = n
         return cat_dict
 
     def _build_numeric_domain_metadata(self, x_num: pd.DataFrame):
-        """Detect binary / integer-like numeric columns and global bounds."""
+        """Detect binary/integer-like numeric columns and global bounds."""
         num_cols = x_num.columns.tolist()
         mins = x_num.min(axis=0)
         maxs = x_num.max(axis=0)
@@ -136,7 +135,7 @@ class RFOversampler:
 
     # fit method
     def fit(self):
- 
+
         # Prepare X / y (one-hot if needed)
         if self.contains_categoricals and not self.encoded:
             data_encoded = pd.get_dummies(self.Data, columns=self.cat_cols, dtype=int)
@@ -162,14 +161,12 @@ class RFOversampler:
 
         # Class accounting (deterministic majority in case of ties)
         vc = y.value_counts()
-        # break ties by sorted label order for stability
         maj_label = vc.sort_values(ascending=False).index[0]
         maj_count = int(vc.loc[maj_label])
         classes = list(vc.index)
         class_counts = {c: int(vc.loc[c]) for c in classes}
 
         y_np = y.to_numpy()
-        n_orig = len(y)
         orig_indices_by_class = {c: np.where(y_np == c)[0] for c in classes}
         maj_indices_orig = orig_indices_by_class[maj_label]
 
@@ -186,9 +183,25 @@ class RFOversampler:
             if upsample_size <= 0 or len(sample_indices) == 0 or len(maj_indices_orig) == 0:
                 continue
 
-            # Boundary-biased seed weights: avg proximity to majority
-            avg_prox_to_maj = prox[np.ix_(sample_indices, maj_indices_orig)].mean(axis=1)
-            sampling_probs = self._normalize_weights(avg_prox_to_maj)
+            # ---------- Boundary seed weighting ----------
+            if self.boundary_strategy == "majority":
+                # Avg proximity to the majority class (original behavior)
+                avg_prox = prox[np.ix_(sample_indices, maj_indices_orig)].mean(axis=1)
+                sampling_probs = self._normalize_weights(avg_prox)
+            else:
+                # "nearest" = for each minority sample, bias by proximity to its nearest *other* class
+                other_classes = [c for c in classes if c != label]
+                per_class_avgs = []
+                for oc in other_classes:
+                    oc_idx = orig_indices_by_class.get(oc, np.array([], dtype=int))
+                    if oc_idx.size > 0:
+                        per_class_avgs.append(self._avg_proximity_to_class(prox, sample_indices, oc_idx))
+                if len(per_class_avgs) == 0:
+                    sampling_probs = np.ones(len(sample_indices), dtype=float) / len(sample_indices)
+                else:
+                    avg_prox_to_nearest = np.max(np.vstack(per_class_avgs), axis=0)
+                    sampling_probs = self._normalize_weights(avg_prox_to_nearest)
+            # --------------------------------------------
 
             for _ in range(upsample_size):
                 # 1) Pick a boundary-biased seed among minority samples
@@ -203,22 +216,21 @@ class RFOversampler:
                 # --- Numeric synthesis ---
                 Xn = x_num.iloc[nbr_idx].to_numpy()  # (K, d_num)
 
-                # Option A (hybrid): with some probability, pick closest neighbor and perturb
+                # Hybrid: sometimes copy the closest neighbor then perturb
                 use_hybrid = (self.hybrid_perturb_frac > 0.0) and (self._rng.random() < self.hybrid_perturb_frac)
                 if use_hybrid:
-                    j_closest = int(np.argmax(p_seed_to_min[order]))
+                    j_closest = 0
                     base_vec = Xn[j_closest].astype(float)
                     new_num = base_vec.copy()
                 else:
-                    # Convex combination (averaging) to get a local mean point
+                    # Convex combination (local mean)
                     new_num = (w @ Xn).astype(float)
 
                 # local noise
-                if self.add_noise and Xn.shape[0] >= 2:
+                if self.add_noise and Xn.shape[0] >= 2 and Xn.shape[1] > 0:
                     mu = Xn.mean(axis=0)
                     S = np.cov((Xn - mu).T) if Xn.shape[0] > 1 else np.eye(Xn.shape[1])
                     S = np.atleast_2d(S)
-                    # shrinkage + ridge for stability
                     alpha = 1e-3
                     S = (1.0 - alpha) * S + alpha * np.eye(S.shape[0])
                     S = S + 1e-8 * np.eye(S.shape[0])
@@ -231,23 +243,19 @@ class RFOversampler:
                         new_num = new_num + eps
 
                 # --- Domain projection for numeric features (optional) ---
-                if self.enforce_domains:
-                    # local bounds from neighbors, combined with global bounds
+                if self.enforce_domains and Xn.shape[1] > 0:
                     local_min = Xn.min(axis=0)
                     local_max = Xn.max(axis=0)
                     mins = np.minimum(local_min, num_mins[num_col_list].to_numpy())
                     maxs = np.maximum(local_max, num_maxs[num_col_list].to_numpy())
-
-                    # 1) clip to plausible range
                     new_num = np.clip(new_num, mins, maxs)
 
-                    # 2) adjust binary & integer-like features
                     for j, col in enumerate(num_col_list):
                         if binary_mask[col]:
                             if self.binary_strategy == "threshold":
                                 new_num[j] = 1.0 if new_num[j] >= 0.5 else 0.0
-                            else:  # bernoulli using weighted neighbor values
-                                p = float(np.clip((w @ Xn[:, j]) / max(w.sum(), 1e-12), 0.0, 1.0))
+                            else:
+                                p = float(np.clip(w @ Xn[:, j], 0.0, 1.0))
                                 new_num[j] = 1.0 if self._rng.random() < p else 0.0
                         elif integer_mask[col]:
                             val = np.rint(new_num[j])
@@ -259,14 +267,13 @@ class RFOversampler:
 
                 # --- Categorical synthesis (weighted local frequencies) ---
                 if self.contains_categoricals and x_cat is not None and cat_cols:
-                    # Build one-hot vector per categorical group sequentially
                     new_cat = []
                     start = 0
                     for cat_name, n_levels in cat_dict.items():
                         end = start + n_levels
                         block = x_cat.iloc[nbr_idx, start:end]  # (K, n_levels)
                         B = block.to_numpy()
-                        p = w @ B  # weighted frequency per level
+                        p = w @ B
                         s = p.sum()
                         if s <= 0:
                             p = np.ones_like(p) / len(p)
@@ -297,7 +304,6 @@ class RFOversampler:
 
         if self.contains_categoricals and new_cat_df is not None:
             if not self.encoded:
-                # convert one-hot blocks back to original categories for concat
                 new_points_cat_non_dummy = self._from_dummies_safe(new_cat_df, sep="_")
                 old_points_cat_non_dummy = self._from_dummies_safe(x_cat, sep="_")
                 new_combined_x = pd.concat([new_num_df, new_points_cat_non_dummy], axis=1)

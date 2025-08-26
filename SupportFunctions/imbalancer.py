@@ -1,70 +1,126 @@
 import pandas as pd
-from sklearn.utils import check_random_state, resample
+import numpy as np
+from sklearn.utils import check_random_state
 
 class ImbalanceHandler:
-    def __init__(self, x_train, y_train, imbalance_ratio=0.2, batch_size=300, random_state=42, min_minority_samples=20):
-        """
-        Handles creation of an imbalanced dataset by resampling with replacement.
+    """
+    Multiclass-aware imbalance inducer using a *pairwise majority-relative cap*.
 
-        Args:
-            x_train (pd.DataFrame): Training feature set.
-            y_train (pd.Series): Corresponding labels.
-            imbalance_ratio (float): Desired minority class ratio per batch (e.g., 0.2 for 20%).
-            batch_size (int): Total size of each resampled batch.
-            random_state (int or RandomState): Random seed or instance.
-            min_minority_samples (int): Minimum number of samples to retain for the minority class.
-        """
+    For a given target ratio r_pair (passed via `imbalance_ratio`), and majority
+    count n_maj (largest class), each non-majority class k is *downsampled only
+    if necessary* to:
+        t_k = min(n_k, max(F, floor(r_pair * n_maj)))
+
+    - Keeps **all majority** samples (never downsample majority).
+    - Applies the same rule for **binary and multiclass**.
+    - Guarantees each minority class has at least **F** examples so neighbor-
+      based oversamplers (SMOTE/RFOversample) are safe.
+    - Does *not* upsample; this stage only induces/class-strengthens imbalance
+      by reducing overly-large minority classes. If a minority class already
+      has <= cap (or < F), it is left as-is.
+    - Any previous `batch_size` or `min_minority_samples` constraints are not
+      used; they’re retained in the signature for backward compatibility.
+
+    Parameters
+    ----------
+    x_train : pd.DataFrame
+        Training feature set.
+    y_train : pd.Series
+        Training labels. The first column name is preserved for return.
+    imbalance_ratio : float, default=0.2
+        Per-class target ratio r_pair relative to the majority count
+        (e.g., 0.10 means each minority class is capped around 10% of majority).
+    batch_size : int, deprecated
+        Ignored (kept for backward compatibility).
+    random_state : int or np.random.RandomState
+        RNG seed/instance.
+    min_minority_samples : int, deprecated
+        Ignored (kept for backward compatibility).
+    floor_base : int, default=30
+        Per-class floor F; we use F = max(floor_base, K+1) to ensure enough
+        neighbors for oversamplers. With K=5, F defaults to 30.
+    K : int, default=5
+        Neighbor budget used by oversamplers; used only to set the floor.
+
+    Returns
+    -------
+    (X_resampled, y_resampled) : (pd.DataFrame, pd.Series)
+        The downsampled training set.
+    """
+    def __init__(
+        self,
+        x_train: pd.DataFrame,
+        y_train: pd.Series,
+        imbalance_ratio: float = 0.2,
+        random_state=42,
+        floor_base: int = 30,
+        K: int = 5,
+    ):
         self.x_train = x_train
         self.y_train = y_train
-        self.imbalance_ratio = imbalance_ratio
-        self.batch_size = batch_size
+        self.r_pair = float(imbalance_ratio)
         self.random_state = check_random_state(random_state)
-        self.min_minority_samples = min_minority_samples
+        self.F = int(max(floor_base, K + 1))
 
     def introduce_imbalance(self):
-        """
-        Introduces class imbalance by manually resampling with replacement.
-
-        Returns:
-            Tuple[pd.DataFrame, pd.Series]: Features and labels of the imbalanced training set.
-        """
         y = self.y_train
         X = self.x_train
-        full_df = pd.concat([X, y], axis=1)
-        label_col = y.name
-        class_counts = y.value_counts()
+        label_col = y.name if y.name is not None else "_y_"
 
+        class_counts = y.value_counts()
         if class_counts.empty or len(class_counts) < 2:
             return X.copy(), y.copy()
 
-        print(f"Original class distribution: {class_counts.to_dict()}")
+        print(f"[ImbalanceHandler] Original class distribution: {class_counts.to_dict()}")
 
-        sorted_classes = class_counts.sort_values().index.tolist()
-        minority_class = sorted_classes[0]
-        other_classes = [cls for cls in sorted_classes if cls != minority_class]
+        # Identify majority (single largest class)
+        maj_class = class_counts.idxmax()
+        n_maj = int(class_counts.loc[maj_class])
 
-        # Determine number of minority samples
-        min_samples = max(int(self.batch_size * self.imbalance_ratio), self.min_minority_samples)
-        samples_remaining = self.batch_size - min_samples
-        per_other_class = samples_remaining // len(other_classes)
+        # Compute per-class cap relative to majority
+        cap = max(self.F, int(np.floor(self.r_pair * n_maj)))
+        if cap < self.F:
+            cap = self.F  # safety; already guaranteed by max() above
 
-        sampled_frames = []
+        # Build index selection: keep ALL majority; cap each minority independently
+        keep_indices = []
 
-        # Resample minority class
-        minority_df = full_df[full_df[label_col] == minority_class]
-        sampled_frames.append(resample(minority_df, replace=True, n_samples=min_samples, random_state=self.random_state))
+        # keep all majority samples
+        maj_idx = y[y == maj_class].index
+        keep_indices.extend(maj_idx.tolist())
 
-        # Resample other classes
-        for cls in other_classes:
-            cls_df = full_df[full_df[label_col] == cls]
-            sampled_frames.append(resample(cls_df, replace=True, n_samples=per_other_class, random_state=self.random_state))
+        # per-minority processing
+        for cls, n_cls in class_counts.items():
+            if cls == maj_class:
+                continue
 
-        result_df = pd.concat(sampled_frames, axis=0).sample(frac=1, random_state=self.random_state).reset_index(drop=True)
+            cls_idx = y[y == cls].index
+            n_cls = int(n_cls)
 
-        X_resampled = result_df.drop(columns=[label_col])
-        y_resampled = result_df[label_col]
+            # If class has fewer than floor F, leave it untouched (don’t make it smaller)
+            if n_cls < self.F:
+                target = n_cls
+            else:
+                # cap at r_pair * n_maj, but never below F
+                target = min(n_cls, cap)
+                target = max(target, self.F)
+
+            # sample without replacement to the target count
+            if n_cls <= target:
+                chosen = cls_idx.tolist()
+            else:
+                chosen = self.random_state.choice(cls_idx, size=target, replace=False).tolist()
+
+            keep_indices.extend(chosen)
+
+        # Shuffle the combined indices for stochasticity
+        keep_indices = self.random_state.permutation(keep_indices)
+
+        X_resampled = X.loc[keep_indices].reset_index(drop=True)
+        y_resampled = y.loc[keep_indices].reset_index(drop=True)
 
         final_counts = y_resampled.value_counts()
-        print(f"Imbalanced class distribution: {final_counts.to_dict()}")
+        print(f"[ImbalanceHandler] Pairwise cap = {cap} (F = {self.F}, r_pair = {self.r_pair})")
+        print(f"[ImbalanceHandler] Imbalanced class distribution: {final_counts.to_dict()}")
 
         return X_resampled, y_resampled
