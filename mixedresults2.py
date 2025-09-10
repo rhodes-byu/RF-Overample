@@ -1,183 +1,173 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""
-mixedresults2.py (SD-only)
-- Loads experiment results
-- Aggregates to one value per (Dataset, Method)
-- Produces:
-    1) Summary Δ vs SMOTE (per dataset, averaged — trivial if single ratio)
-    2) Method performance distribution across datasets (box + jitter with ±SD)
-    3) Average rank across datasets (lower is better)
-    4) Per-dataset bar charts comparing methods (Mean ± SD)
-Notes:
-- This script uses ONLY Standard Deviation (SD) for variability visualization.
-- It assumes you're currently working with a single imbalance ratio; aggregation
-  still works if more are added later.
-"""
-
 from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# =========================
-# --- Config ---
-# =========================
+# comparison methods
+PRIMARY_A = "RFOversample"
+PRIMARY_B = "SMOTE"
+
 CSV_PATH = "my_experiment_results.csv"
 OUT_DIR = Path("graphs")
-PER_DATASET_DIR = OUT_DIR / "per_dataset"
 OUT_DIR.mkdir(exist_ok=True)
-PER_DATASET_DIR.mkdir(parents=True, exist_ok=True)
+PER_DS_DIR = OUT_DIR / "per_dataset2"
+PER_DS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Consistent method order for plots
-order_methods = ["Baseline", "Unbalanced", "SMOTE", "RFOversample"]
+# ---------- helpers ----------
+def ensure_num(s):
+    return pd.to_numeric(s, errors="coerce")
 
-# =========================
-# --- Load ---
-# =========================
+def se_from_sd_n(sd, n):
+    n = max(int(n), 1)
+    return sd / np.sqrt(n)
+
+def welch_t_from_summary(m1, sd1, n1, m2, sd2, n2):
+    """Welch's t-test from summary (two-sided). Returns (t, df, p)."""
+    from scipy.stats import t
+    v1 = (sd1**2) / n1
+    v2 = (sd2**2) / n2
+    se = np.sqrt(v1 + v2)
+    if se == 0:
+        return np.nan, np.nan, np.nan
+    t_stat = (m1 - m2) / se
+    df = (v1 + v2)**2 / ((v1**2)/(n1-1) + (v2**2)/(n2-1)) if n1 > 1 and n2 > 1 else np.nan
+    p = 2 * (1 - t.cdf(abs(t_stat), df)) if df == df else np.nan
+    return t_stat, df, p
+
+# ---------- load & filter ----------
 df = pd.read_csv(CSV_PATH)
 
-# Require SD (we standardize on SD-only)
-required = {"Dataset", "Method", "Mean_Weighted_F1", "Standard_Deviation"}
-missing = required - set(df.columns)
-if missing:
-    raise ValueError(f"CSV missing required columns: {missing}")
-
-# Optional columns we won't rely on for plotting, but keep if present
+required = ["Dataset", "Method", "Mean_Weighted_F1", "Standard_Deviation", "Seed_Count"]
+for c in required:
+    if c not in df.columns:
+        raise ValueError(f"Missing required column: {c}")
 if "Imbalance_Ratio" not in df.columns:
     df["Imbalance_Ratio"] = np.nan
 
-# Harmonize method names
-df["Method"] = df["Method"].replace({
-    "OversamplerJ": "RFOversample",
-    "RFoversample": "RFOversample",
-    "rfoversampler": "RFOversample",
-    "SMOTE": "SMOTE",
-    "Unbalanced": "Unbalanced",
-    "Baseline": "Baseline",
-})
+# Coerce numerics
+df["Mean_Weighted_F1"]   = ensure_num(df["Mean_Weighted_F1"])
+df["Standard_Deviation"] = ensure_num(df["Standard_Deviation"])
+df["Seed_Count"]         = ensure_num(df["Seed_Count"])
+df["Imbalance_Ratio"]    = ensure_num(df["Imbalance_Ratio"])
 
-# =========================
-# Aggregation helpers
-# =========================
-def combine_mean_sd(g: pd.DataFrame) -> pd.Series:
-    """
-    Combine potentially multiple rows per (Dataset, Method) (e.g., multiple runs/ratios)
-    Mean = arithmetic mean of Mean_Weighted_F1
-    SD   = RMS of Standard_Deviation (conservative combination across rows)
-    """
-    m = g["Mean_Weighted_F1"].mean()
-    sd = np.sqrt(np.nanmean(np.square(g["Standard_Deviation"].fillna(0.0))))
-    return pd.Series({"Mean": m, "SD": sd})
+# keep only the two methods of interest
+df2 = df[df["Method"].isin([PRIMARY_A, PRIMARY_B])].copy()
 
-# Aggregate to one row per (Dataset, Method)
-agg_dataset_method = (
-    df.groupby(["Dataset", "Method"], dropna=False)
-      .apply(combine_mean_sd, include_groups=False)
-      .reset_index()
-)
-
-# =========================
-# 1) Summary: Δ vs SMOTE (per dataset)
-# =========================
-smote = agg_dataset_method[agg_dataset_method["Method"] == "SMOTE"][["Dataset", "Mean"]].set_index("Dataset")
-rf    = agg_dataset_method[agg_dataset_method["Method"] == "RFOversample"][["Dataset", "Mean"]].set_index("Dataset")
-
-if not smote.empty and not rf.empty:
-    delta = (rf["Mean"] - smote["Mean"]).dropna().sort_values()
-    fig, ax = plt.subplots(figsize=(8, max(4, 0.3 * len(delta)) if len(delta) else 4))
-    colors = np.where(delta.values >= 0, "tab:green", "tab:red") if len(delta) else []
-    ax.barh(delta.index if len(delta) else [], delta.values if len(delta) else [], color=colors)
-    ax.axvline(0, linestyle="--", linewidth=1)
-    ax.set_xlabel("RFOversample − SMOTE (Mean Weighted F1)")
-    ax.set_ylabel("Dataset")
-    ax.set_title("Improvement of RFOversample over SMOTE (per dataset)")
-    plt.tight_layout()
-    plt.savefig(OUT_DIR / "summary_delta_vs_smote.png", dpi=200)
-    plt.close()
-
-# =========================
-# 2) Method performance distribution across datasets (box + jitter with ±SD)
-# =========================
-summ = agg_dataset_method.copy()
-summ["Method"] = pd.Categorical(summ["Method"], categories=order_methods, ordered=True)
-
-data = [summ.loc[summ["Method"] == m, "Mean"].dropna().values for m in order_methods]
-fig, ax = plt.subplots(figsize=(8, 5))
-positions = np.arange(1, len(order_methods) + 1)
-ax.boxplot(data, positions=positions, showfliers=False)
-
-# jittered points with ±SD per dataset-method
-for i, m in enumerate(order_methods, start=1):
-    sub = summ.loc[summ["Method"] == m, ["Mean", "SD"]].dropna(subset=["Mean"])
-    if sub.empty:
-        continue
-    y = sub["Mean"].to_numpy()
-    sd = sub["SD"].to_numpy()
-    x = np.random.normal(loc=i, scale=0.05, size=len(y))
-    ax.plot(x, y, "o", alpha=0.6)
-    ax.errorbar(x, y, yerr=sd, fmt="none", elinewidth=1, capsize=2, alpha=0.6)
-
-ax.set_xticks(positions)
-ax.set_xticklabels(order_methods)
-ax.set_ylabel("Mean Weighted F1 (per dataset)")
-ax.set_title("Method performance distribution across datasets (Mean ± SD)")
-plt.tight_layout()
-plt.savefig(OUT_DIR / "summary_method_distribution.png", dpi=200)
-plt.close()
-
-# =========================
-# 3) Average ranks across datasets (lower is better)
-# =========================
-def ranks_per_dataset(g: pd.DataFrame) -> pd.DataFrame:
-    g = g.copy()
-    g["Rank"] = (-g["Mean"]).rank(method="average")  # rank 1 = best
-    return g
-
-ranked = agg_dataset_method.groupby("Dataset", dropna=False)\
-    .apply(ranks_per_dataset, include_groups=False).reset_index(drop=True)
-
-avg_ranks = (
-    ranked.groupby("Method", dropna=False)["Rank"].mean()
-          .reindex(order_methods)
-          .dropna()
-)
-
-fig, ax = plt.subplots(figsize=(7, 4))
-ax.bar(avg_ranks.index.astype(str), avg_ranks.values)
-ax.set_ylabel("Average rank (lower is better)")
-ax.set_title("Average method rank across datasets")
-for i, v in enumerate(avg_ranks.values):
-    ax.text(i, v + 0.02, f"{v:.2f}", ha="center", va="bottom", fontsize=9)
-plt.tight_layout()
-plt.savefig(OUT_DIR / "summary_average_ranks.png", dpi=200)
-plt.close()
-
-# =========================
-# 4) Per-dataset bars (Mean ± SD)
-#     - Clean when only a single imbalance ratio is used (no lines/ratios)
-# =========================
-for ds, g in agg_dataset_method.groupby("Dataset", dropna=False):
-    g = g.copy()
-    g["Method"] = pd.Categorical(g["Method"], categories=order_methods, ordered=True)
-    g = g.sort_values("Method").dropna(subset=["Mean"])
-    if g.empty:
+# ---------- compute per-dataset×ratio deltas, CI, Welch ----------
+rows = []
+group_cols = ["Dataset", "Imbalance_Ratio"]
+for (ds, ratio), g in df2.groupby(group_cols, dropna=False):
+    A = g[g["Method"] == PRIMARY_A]
+    B = g[g["Method"] == PRIMARY_B]
+    if A.empty or B.empty:
         continue
 
-    fig, ax = plt.subplots(figsize=(7, 4))
-    methods = g["Method"].astype(str).tolist()
-    means = g["Mean"].to_numpy()
-    sds   = g["SD"].to_numpy()
+    mA, sdA, nA = float(A["Mean_Weighted_F1"].values[0]), float(A["Standard_Deviation"].values[0]), int(A["Seed_Count"].values[0])
+    mB, sdB, nB = float(B["Mean_Weighted_F1"].values[0]), float(B["Standard_Deviation"].values[0]), int(B["Seed_Count"].values[0])
+    seA, seB = se_from_sd_n(sdA, nA), se_from_sd_n(sdB, nB)
 
-    ax.bar(methods, means, yerr=sds, capsize=3)
-    ax.set_ylim(0, 1)  # adjust if your metric differs
-    ax.set_ylabel("Mean Weighted F1 (±SD)")
-    ax.set_title(ds)
-    plt.xticks(rotation=20, ha="right")
+    delta = mA - mB
+    se_delta = np.sqrt(seA**2 + seB**2)
+    ci95 = 1.96 * se_delta
+
+    t_stat, df_w, p_val = welch_t_from_summary(mA, sdA, nA, mB, sdB, nB)
+
+    rows.append({
+        "Dataset": ds,
+        "Imbalance_Ratio": ratio,
+        f"{PRIMARY_A}_mean": mA,
+        f"{PRIMARY_A}_SD": sdA,
+        f"{PRIMARY_A}_SE": seA,
+        f"{PRIMARY_B}_mean": mB,
+        f"{PRIMARY_B}_SD": sdB,
+        f"{PRIMARY_B}_SE": seB,
+        "Delta_A_minus_B": delta,
+        "SE_Delta": se_delta,
+        "CI95_Delta": ci95,
+        "Welch_t": t_stat,
+        "Welch_df": df_w,
+        "Welch_p": p_val,
+        "Significant_p<0.05": (p_val < 0.05) if p_val == p_val else False
+    })
+
+delta_df = pd.DataFrame(rows).sort_values(["Imbalance_Ratio", "Delta_A_minus_B"])
+out_csv = OUT_DIR / f"delta_{PRIMARY_A}_vs_{PRIMARY_B}.csv"
+delta_df.to_csv(out_csv, index=False)
+print(f"[Saved] Δ table -> {out_csv.resolve()}")
+
+# ---------- quick win-rate summary ----------
+summary = (
+    delta_df
+    .assign(Win = np.where(delta_df["Delta_A_minus_B"] > 0, 1, 0),
+            Win_sig = np.where((delta_df["Delta_A_minus_B"] > 0) & (delta_df["Welch_p"] < 0.05), 1, 0))
+    .groupby("Imbalance_Ratio", dropna=False)[["Win","Win_sig"]]
+    .mean()
+    .rename(columns={"Win":"WinRate_A>B", "Win_sig":"WinRate_A>B_significant"})
+)
+print("\nWin rates by ratio (fraction of datasets):")
+print(summary.to_string(float_format=lambda x: f"{x:.2f}"))
+
+# ---------- plots: forest-style Δ with 95% CI (per ratio) ----------
+for ratio, g in delta_df.groupby("Imbalance_Ratio", dropna=False):
+    g = g.sort_values("Delta_A_minus_B")
+    labels = g["Dataset"].tolist()
+    y = np.arange(len(labels))
+
+    fig, ax = plt.subplots(figsize=(8, max(4, 0.35*len(labels))))
+    ax.barh(y, g["Delta_A_minus_B"].to_numpy())
+    ax.errorbar(g["Delta_A_minus_B"].to_numpy(), y, xerr=g["CI95_Delta"].to_numpy(),
+                fmt="none", capsize=2)
+    ax.axvline(0.0, color="k", linestyle="--", linewidth=1)
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels)
+    title = f"{PRIMARY_A} − {PRIMARY_B} (Δ F1, 95% CI)" + (f" | Imbalance={ratio:g}" if ratio == ratio else "")
+    ax.set_title(title)
+    ax.set_xlabel("Δ Mean Weighted F1 (A − B)")
     plt.tight_layout()
-    plt.savefig(PER_DATASET_DIR / f"{ds}_methods_mean_sd.png", dpi=200)
+    fname = OUT_DIR / f"delta_{PRIMARY_A}_minus_{PRIMARY_B}__imb_{'NA' if ratio != ratio else str(ratio).replace('.','p')}.png"
+    plt.savefig(fname, dpi=200)
+    plt.close()
+    print(f"[Saved] {fname}")
+
+# ---------- plots: per-dataset two-bar (A vs B) with ±SE and AUTO-ZOOM Y ----------
+for (ds, ratio), g in df2.groupby(group_cols, dropna=False):
+    A = g[g["Method"] == PRIMARY_A]
+    B = g[g["Method"] == PRIMARY_B]
+    if A.empty or B.empty:
+        continue
+
+    means = np.array([float(A["Mean_Weighted_F1"].values[0]), float(B["Mean_Weighted_F1"].values[0])], dtype=float)
+    ses   = np.array([
+        se_from_sd_n(float(A["Standard_Deviation"].values[0]), int(A["Seed_Count"].values[0])),
+        se_from_sd_n(float(B["Standard_Deviation"].values[0]), int(B["Seed_Count"].values[0]))
+    ], dtype=float)
+    labels = [PRIMARY_A, PRIMARY_B]
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.bar(labels, means, yerr=ses, capsize=3)
+
+    # ---- AUTO-ZOOM Y-AXIS (with safety clamps and minimum span) ----
+    ymin = float(np.min(means - ses))
+    ymax = float(np.max(means + ses))
+    # pad by 5% of range (or small epsilon if flat)
+    rng = max(ymax - ymin, 1e-6)
+    pad = 0.05 * rng
+    y_low = max(0.0, ymin - pad)
+    y_high = min(1.0, ymax + pad)
+    # ensure a minimum visible span (e.g., 0.05) so error bars are readable
+    min_span = 0.05
+    if (y_high - y_low) < min_span:
+        mid = 0.5 * (y_high + y_low)
+        y_low = max(0.0, mid - 0.5 * min_span)
+        y_high = min(1.0, mid + 0.5 * min_span)
+    ax.set_ylim(y_low, y_high)
+
+    ax.set_ylabel("Mean Weighted F1 (±SE)")
+    title = f"{ds}" + (f" | Imbalance={ratio:g}" if ratio == ratio else "")
+    ax.set_title(title)
+    plt.tight_layout()
+    fname = PER_DS_DIR / f"{ds}__imb_{'NA' if ratio != ratio else str(ratio).replace('.','p')}_{PRIMARY_A}_vs_{PRIMARY_B}.png"
+    plt.savefig(fname, dpi=200)
     plt.close()
 
-print(f"Saved figures in: {OUT_DIR.resolve()}")
-print(f"Per-dataset figures in: {PER_DATASET_DIR.resolve()}")
+print(f"[Done] Figures saved under {OUT_DIR.resolve()} and {PER_DS_DIR.resolve()}")
